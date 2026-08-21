@@ -1,0 +1,15 @@
+# /etc/systemd/system/rnvcs-yonetim-servisi.service
+[Unit]
+Description=RNVCS Yonetim Servisi (Go REST API)
+After=network.target postgresql.service asterisk.service
+Wants=postgresql.service asterisk.service
+
+[Service]
+EnvironmentFile=/etc/rnvcs/yonetim-servisi.env
+ExecStart=/opt/rnvcs/rnvcs-yonetim-servisi
+Restart=on-failure
+RestartSec=2
+User=root
+
+[Install]
+WantedBy=multi-user.target
