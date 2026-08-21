@@ -28,6 +28,20 @@ PANEL_HOST="${PANEL_HOST:-localhost}"
 PANEL_PORT="${PANEL_PORT:-8090}"
 DB_NAME="${DB_NAME:-rnvcs}"
 DB_USER="${DB_USER:-rnvcs}"
+
+# CORE'un kendi env dosyasında zaten çalışan bir DSN varsa (RNVCS_DB_DSN), onu kullan —
+# Postgres local bağlantılarda 'peer' auth kullandığı için (OS kullanıcısı = rnvcs-deploy,
+# DB rolü = rnvcs eşleşmiyor), TCP + şifre ile bağlanmak gerekiyor. DSN yoksa eski
+# (peer/socket) davranışa düşülür — o zaman bu script'in postgres/rnvcs OS kullanıcısıyla
+# çalıştırılması gerekir.
+RNVCS_ENV_FILE="${RNVCS_ENV_FILE:-/etc/rnvcs/yonetim-servisi.env}"
+DB_DSN=""
+if [ -r "$RNVCS_ENV_FILE" ]; then
+  DB_DSN="$(grep -E '^RNVCS_DB_DSN=' "$RNVCS_ENV_FILE" 2>/dev/null | cut -d'=' -f2-)"
+elif [ -f "$RNVCS_ENV_FILE" ] && command -v sudo >/dev/null 2>&1; then
+  # Dosya root-only (600) olabilir; dar kapsamlı NOPASSWD sudo izniyle sadece okuma deneriz.
+  DB_DSN="$(sudo -n cat "$RNVCS_ENV_FILE" 2>/dev/null | grep -E '^RNVCS_DB_DSN=' | cut -d'=' -f2-)"
+fi
 RUN_ECHO_TEST=0
 TIMEOUT="${TIMEOUT:-5}"
 
@@ -133,10 +147,16 @@ fi
 # ---------- 6) Veritabanı bağlantısı ----------
 info "6) PostgreSQL (${DB_NAME}) bağlantısı kontrol ediliyor..."
 if command -v psql >/dev/null 2>&1; then
-  if PGCONNECT_TIMEOUT="$TIMEOUT" psql -U "$DB_USER" -d "$DB_NAME" -tAc "SELECT 1;" >/dev/null 2>&1; then
+  if [ -n "$DB_DSN" ]; then
+    if PGCONNECT_TIMEOUT="$TIMEOUT" psql "$DB_DSN" -tAc "SELECT 1;" >/dev/null 2>&1; then
+      ok "PostgreSQL bağlantısı ve basit sorgu başarılı (${RNVCS_ENV_FILE}'daki DSN ile)"
+    else
+      fail "PostgreSQL'e bağlanılamadı (${RNVCS_ENV_FILE}'daki DSN ile denendi)"
+    fi
+  elif PGCONNECT_TIMEOUT="$TIMEOUT" psql -U "$DB_USER" -d "$DB_NAME" -tAc "SELECT 1;" >/dev/null 2>&1; then
     ok "PostgreSQL bağlantısı ve basit sorgu başarılı"
   else
-    fail "PostgreSQL'e bağlanılamadı (kullanıcı=${DB_USER}, db=${DB_NAME})"
+    fail "PostgreSQL'e bağlanılamadı (kullanıcı=${DB_USER}, db=${DB_NAME}) — ${RNVCS_ENV_FILE} bulunamadı, peer auth ile denendi"
   fi
 else
   info "psql bulunamadı, DB kontrolü atlandı"
@@ -154,8 +174,13 @@ if [ "$RUN_ECHO_TEST" -eq 1 ]; then
     else
       # CDR'da son 30 saniyede 600'e giden ANSWERED bir kayıt var mı bak.
       if command -v psql >/dev/null 2>&1; then
-        cdr_check=$(psql -U "$DB_USER" -d "$DB_NAME" -tAc \
-          "SELECT count(*) FROM asterisk_cdr WHERE dst='600' AND disposition='ANSWERED' AND start > now() - interval '30 seconds';" 2>/dev/null)
+        if [ -n "$DB_DSN" ]; then
+          cdr_check=$(psql "$DB_DSN" -tAc \
+            "SELECT count(*) FROM asterisk_cdr WHERE dst='600' AND disposition='ANSWERED' AND start > now() - interval '30 seconds';" 2>/dev/null)
+        else
+          cdr_check=$(psql -U "$DB_USER" -d "$DB_NAME" -tAc \
+            "SELECT count(*) FROM asterisk_cdr WHERE dst='600' AND disposition='ANSWERED' AND start > now() - interval '30 seconds';" 2>/dev/null)
+        fi
         if [ "${cdr_check:-0}" -gt 0 ]; then
           ok "600 echo testi: CDR'da ANSWERED kayıt bulundu"
         else
