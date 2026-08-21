@@ -74,7 +74,7 @@ jobs:
         run: |
           for f in migrations/*.sql; do
             echo "=== Uygulanıyor (1. tur): $f ==="
-            psql -h localhost -U rnvcs -d rnvcs_ci_test -f "$f"
+            psql -h postgres -U rnvcs -d rnvcs_ci_test -f "$f"
           done
 
       - name: Migration'ları İKİNCİ kez uygula (idempotency kanıtı)
@@ -83,10 +83,10 @@ jobs:
         run: |
           for f in migrations/*.sql; do
             echo "=== Uygulanıyor (2. tur — hata VERMEMELİ): $f ==="
-            psql -h localhost -U rnvcs -d rnvcs_ci_test -f "$f"
+            psql -h postgres -U rnvcs -d rnvcs_ci_test -f "$f"
           done
 
       - name: Şema özetini yazdır (görsel doğrulama için)
         env:
           PGPASSWORD: rnvcs_test_only
-        run: psql -h localhost -U rnvcs -d rnvcs_ci_test -c '\dt'
+        run: psql -h postgres -U rnvcs -d rnvcs_ci_test -c '\dt'
