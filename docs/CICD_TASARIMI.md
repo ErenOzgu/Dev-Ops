@@ -1,12 +1,13 @@
 # RNVCS — Tam Otomatik CI/CD Tasarımı
 
-**Amaç:** Koddan (push) → teste → pakete → dağıtıma kadar olan zinciri, insan müdahalesini yalnızca "üretime al" kararına indirgeyecek şekilde otomatikleştirmek.
+**Amaç:** Koddan (push) → teste → pakete → **yedek CORE'a** dağıtıma kadar olan zinciri tamamen otomatikleştirmek.
 
-Bu belge dört dosyayla birlikte gelir:
+**⚠️ KALICI KARAR (2026-08-21): Üretim CORE (15.2.4.10) bu CI/CD sistemine KESİNLİKLE dahil edilmeyecek — geçici bir "şimdilik" değil, kalıcı bir politika.** Bu makineye bu sistem üzerinden hiçbir zaman SSH bağlantısı, deploy, secret ya da kullanıcı tanımlanmayacak. `deploy-production.yml` workflow dosyası bilinçli olarak repodan kaldırıldı. Üretime geçiş — eğer/ne zaman gerekirse — tamamen bu sistemin dışında, ayrı ve elle yürütülen bir süreç olacak.
+
+Bu belge üç dosyayla birlikte gelir:
 - `.gitea/workflows/ci.yml` — her push/PR'da lint+test+migration testi
 - `.gitea/workflows/release.yml` — sürüm etiketi (`vX.Y.Z`) atılınca otomatik derle+paketle+**yedek CORE'a** dağıt
-- `.gitea/workflows/deploy-production.yml` — **elle tetiklenen**, üretime dağıtım (otomatik rollback'li)
-- `scripts/deploy_apply.sh`, `scripts/rollback.sh`, `scripts/backup_current.sh` — hedef sunucularda çalışan uygulama betikleri
+- `scripts/deploy_apply.sh`, `scripts/rollback.sh`, `scripts/backup_current.sh` — yedek CORE'da (ve panelde) çalışan uygulama betikleri
 
 ---
 
@@ -17,14 +18,12 @@ push (herhangi bir dal)          → CI (lint+test+migration testi)         → 
 main'e merge                     → (aynı CI tekrar)                       → TAM OTOMATİK
 git tag vX.Y.Z && git push --tags → derle + paketle + YEDEK CORE'a dağıt   → TAM OTOMATİK
                                      + yedek CORE'da smoke test            → TAM OTOMATİK
-                                     (smoke test FAIL ederse burada durur, → OTOMATİK DURDURMA
-                                      üretime hiç gitmez)
-Gitea arayüzünden "Run Workflow" → ÜRETİME dağıt + smoke test             → SADECE ELLE TETİKLENİR
-                                     (smoke test FAIL ederse otomatik      → OTOMATİK ROLLBACK
-                                      rollback tetiklenir)
+                                     (smoke test FAIL ederse burada durur) → OTOMATİK DURDURMA
+
+ÜRETİM (15.2.4.10)               → BU SİSTEMİN KAPSAMI DIŞINDA            → BU SİSTEM ASLA DOKUNMAZ
 ```
 
-**Neden üretim adımı tam otomatik değil?** Çünkü geri dönüşü en pahalı olan adım o — bir push'un otomatik olarak dakikalar içinde gerçek trafiğe çıkmasını istemeyiz. Yedek CORE'a kadar her şey otomatik (o zaten trafik almıyor, düşük risk); üretime geçiş bilinçli, tek tıklık bir insan kararı. Bu, yol haritasındaki "rollback stratejisi" ve "canary" prensipleriyle birebir uyumlu.
+Otomasyonun sınırı yedek CORE'da bitiyor — o zaten canlı trafik taşımıyor, düşük risk. Üretim, bu CI/CD boru hattının bilerek dokunmadığı, tamamen ayrı bir alan.
 
 ---
 
@@ -102,12 +101,13 @@ Push eder etmez `ci.yml` otomatik tetiklenip çalışmaya başlayacak — Gitea'
 | `DEPLOY_SSH_KEY` | Deploy için üretilecek **özel** SSH private key'in tam içeriği | Aşağıda 2.4'te üretimi anlatılıyor |
 | `DEPLOY_USER` | ör. `rnvcs-deploy` | Hedef sunuculardaki kısıtlı deploy kullanıcısı |
 | `YEDEK_CORE_HOST` | `15.2.4.11` | |
-| `PROD_CORE_HOST` | `15.2.4.10` | |
 | `PANEL_HOST` | `15.2.4.201` | |
+
+**`PROD_CORE_HOST` (15.2.4.10) BİLEREK YOK — bu secret hiçbir zaman tanımlanmayacak.** Üretim CORE bu sisteme kalıcı olarak dahil değil (bkz. belgenin başındaki uyarı).
 
 ### 2.4 Hedef sunucularda deploy kullanıcısı hazırlama
 
-**Genel kural: CI'nin deploy anahtarı, sizin kişisel SSH anahtarınızdan AYRI ve kısıtlı olmalı.** Her hedef sunucuda (yedek CORE, üretim CORE, panel):
+**Genel kural: CI'nin deploy anahtarı, sizin kişisel SSH anahtarınızdan AYRI ve kısıtlı olmalı.** Sadece iki hedef sunucuda (yedek CORE, panel) — üretim CORE'da (15.2.4.10) KESİNLİKLE değil:
 
 ```bash
 # Hedef sunucuda (ör. 15.2.4.11'de):
@@ -138,7 +138,7 @@ Bu betikleri (`deploy_apply.sh`, `rollback.sh`, `backup_current.sh`, `rnvcs_smok
 scp scripts/deploy_apply.sh scripts/rollback.sh scripts/backup_current.sh scripts/rnvcs_smoke_test.sh \
   rnvcs-deploy@15.2.4.11:/opt/rnvcs/scripts/
 ```
-(Aynısını `15.2.4.10` ve gerekirse `15.2.4.201` için de yapın.)
+(Aynısını gerekirse `15.2.4.201` — panel — için de yapın. `15.2.4.10`'a KESİNLİKLE kopyalamayın.)
 
 `DEPLOY_SSH_KEY` secret'ına `~/.ssh/rnvcs_deploy_key`'in **private** içeriğini (`cat ~/.ssh/rnvcs_deploy_key`) koyun.
 
@@ -165,8 +165,7 @@ git push origin main --tags
 # → release.yml otomatik tetiklenir: derler, paketler, YEDEK CORE'a dağıtır, smoke test çalıştırır
 ```
 
-**Yedek CORE'da sorun yoksa, üretime almak için:**
-Gitea arayüzü → **İşlemler → Deploy Production → Run Workflow** → `version: 1.6.1` yazıp onay kutusunu işaretleyip çalıştırın. Otomatik: DB yedeği alınır → tar üretime kopyalanır → kurulur → smoke test çalışır → **başarısızsa otomatik geri alınır.**
+**Üretime almak:** Bu sistemin kapsamında yok. Yedek CORE'da doğrulanan bir sürümü üretime (15.2.4.10) almak istenirse, bu tamamen ayrı, CI/CD dışı, elle yürütülen bir süreç olacak — o zaman ayrıca planlanır.
 
 ---
 
@@ -177,7 +176,7 @@ Gitea arayüzü → **İşlemler → Deploy Production → Run Workflow** → `v
 
 ## 5. Bilinen Sınırlamalar / Sonraki İyileştirmeler
 
-- Gitea Actions'ın "environment protection rule" (GitHub'daki gibi onaylı ortam kapıları) desteği sınırlı olabilir sürüme göre — bu yüzden `deploy-production.yml`'i `workflow_dispatch` ile "elle tetikleme" olarak tasarladık, aynı güvenliği daha basit şekilde sağlıyor.
-- Panel'e (`panel_app.html`) dağıtım şu an sadece `deploy-production.yml` içinde, üretim dağıtımıyla birlikte yapılıyor — panel'i bağımsız güncellemek isterseniz ayrı bir `deploy-panel.yml` (aynı `workflow_dispatch` deseniyle) eklenebilir.
+- Üretim CORE (15.2.4.10) kalıcı olarak kapsam dışı — bu bir eksiklik değil, bilinçli bir karar (bkz. belgenin başı).
+- Panel'e (`panel_app.html`) bağımsız dağıtım şu an yok — istenirse `release.yml`'e ayrı bir adım veya ayrı bir `deploy-panel.yml` (`workflow_dispatch`) eklenebilir.
 - Bildirim (deploy başarılı/başarısız olduğunda e-posta/mesaj) şu an yok — pipeline sonucu sadece Gitea arayüzünde görünüyor. İsterseniz bir sonraki adımda basit bir webhook/e-posta adımı ekleriz.
 - `act_runner` tek makinede (rnvcs-ci01) çalışıyor — bu makine düşerse CI de durur; şimdilik kabul edilebilir bir risk, ölçek büyürse ikinci bir runner düşünülebilir.
