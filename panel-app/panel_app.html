@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>VCS Panel</title>
+<style>
+  :root{
+    --bg-0:#0a0e18; --bg-1:#111725; --bg-2:#1a2336; --border:#283350;
+    --text-hi:#eef3ff; --text-lo:#8794b5; --accent:#3b6ef5;
+    --green:#25c281; --green-d:#1f9e5c; --red:#e5484d; --red-d:#c93b40; --gold:#c9a24b;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; }
+  body{
+    font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    background:var(--bg-0); color:var(--text-hi); overflow:hidden; user-select:none;
+  }
+  button{ cursor:pointer; font-family:inherit; }
+
+  /* ---------- LOGIN ---------- */
+  #login-screen{
+    position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(1200px 600px at 50% -10%, #16203c 0%, var(--bg-0) 60%);
+  }
+  .login-card{
+    width:min(440px,92vw); background:var(--bg-1); border:1px solid var(--border);
+    border-radius:20px; padding:36px 32px; box-shadow:0 24px 60px rgba(0,0,0,.5);
+  }
+  .login-card h1{ font-size:26px; margin-bottom:4px; }
+  .login-card .sub{ font-size:13px; color:var(--text-lo); margin-bottom:24px; }
+  .login-field{ margin-bottom:18px; }
+  .login-field label{ display:block; font-size:13px; color:var(--text-lo); margin-bottom:8px; }
+  .login-field input{
+    width:100%; padding:16px; font-size:18px; border-radius:14px;
+    background:var(--bg-2); border:1px solid var(--border); color:var(--text-hi);
+  }
+  #login-btn{
+    width:100%; padding:18px; font-size:18px; font-weight:800; border:none; border-radius:14px;
+    background:linear-gradient(160deg,var(--accent),#2b52c0); color:#fff; margin-top:8px;
+  }
+  #login-error{ min-height:18px; color:var(--red); font-size:13px; text-align:center; margin-top:14px; }
+  #login-panel-id{ margin-top:16px; text-align:center; font-size:12px; color:var(--text-lo); }
+  #server-status.ok{ color:var(--green); } #server-status.fail{ color:var(--red); }
+
+  /* ---------- APP ---------- */
+  #app{ height:100%; display:none; flex-direction:column; }
+  #app.show{ display:flex; }
+
+  #topbar{
+    display:flex; align-items:center; gap:16px; padding:14px 22px;
+    background:var(--bg-1); border-bottom:1px solid var(--border);
+  }
+  #topbar .brand{ font-size:18px; font-weight:800; letter-spacing:.5px; }
+  #topbar .brand small{ color:var(--gold); font-weight:700; font-size:15px; }
+  #topbar .spacer{ flex:1; }
+  .op-badge{ display:flex; align-items:center; gap:12px; }
+  .op-avatar{
+    width:44px; height:44px; border-radius:50%; background:var(--accent);
+    display:flex; align-items:center; justify-content:center; font-weight:800; font-size:17px;
+  }
+  .op-name{ font-size:15px; font-weight:700; } .op-role{ font-size:12px; color:var(--text-lo); }
+  #btn-logout{
+    background:var(--bg-2); border:1px solid var(--border); color:var(--text-hi);
+    border-radius:12px; padding:12px 16px; font-size:15px; font-weight:700; display:flex; align-items:center; gap:8px;
+  }
+  #btn-logout:active{ background:var(--red-d); border-color:var(--red); }
+  .clock{ text-align:right; } .clock .t{ font-size:19px; font-weight:800; } .clock .d{ font-size:12px; color:var(--text-lo); }
+
+  #main{ flex:1; display:flex; gap:20px; padding:22px; overflow:hidden; }
+  .col{ display:flex; flex-direction:column; gap:18px; min-height:0; }
+  .col.left{ flex:1; } .col.right{ flex:1.1; }
+  .card{ background:var(--bg-1); border:1px solid var(--border); border-radius:18px; padding:20px; }
+  .card h2{ font-size:13px; color:var(--text-lo); font-weight:700; letter-spacing:.8px; margin-bottom:14px; text-transform:uppercase; }
+
+  /* Hızlı arama */
+  .quick-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .quick-btn{
+    display:flex; flex-direction:column; align-items:flex-start; gap:6px;
+    padding:22px 18px; border-radius:16px; border:1px solid var(--border);
+    background:linear-gradient(160deg,var(--bg-2),#141c30); color:var(--text-hi); text-align:left; position:relative;
+  }
+  .quick-btn:active{ transform:scale(.97); }
+  .quick-btn .qn{ font-size:22px; font-weight:800; }
+  .quick-btn .qt{ font-size:13px; color:var(--text-lo); }
+  .quick-btn .call-ic{
+    position:absolute; top:16px; right:16px; width:40px; height:40px; border-radius:50%;
+    background:var(--green); color:#04180d; display:flex; align-items:center; justify-content:center; font-size:19px;
+  }
+
+  /* Dialpad */
+  #dialpad-input{
+    width:100%; padding:18px; border-radius:14px; margin-bottom:14px; text-align:center;
+    background:var(--bg-2); border:1px solid var(--border); color:var(--text-hi);
+    font-size:34px; font-weight:800; letter-spacing:2px;
+  }
+  .dialpad-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .dpad-key{
+    min-height:72px; border-radius:16px; background:var(--bg-2); border:1px solid var(--border);
+    color:var(--text-hi); font-size:28px; font-weight:700;
+  }
+  .dpad-key:active{ background:var(--bg-0); transform:scale(.96); }
+  .dialpad-actions{ display:flex; gap:12px; margin-top:14px; }
+  #dpad-call{
+    flex:1; min-height:68px; border-radius:16px; border:none; font-weight:800; font-size:20px;
+    background:linear-gradient(160deg,var(--green),var(--green-d)); color:#04180d;
+  }
+  #dpad-call:active{ transform:scale(.98); }
+  #dpad-back{
+    width:84px; min-height:68px; border-radius:16px; border:1px solid var(--border);
+    background:var(--bg-2); color:var(--text-hi); font-size:24px;
+  }
+  #dialpad-error{ min-height:16px; color:var(--red); font-size:13px; text-align:center; margin-top:10px; }
+
+  /* Ses kontrol satırı (ortak stil — hem ana ekran hem çağrı paneli) */
+  .audio-row{ display:flex; gap:12px; }
+  .audio-btn{
+    flex:1; min-height:76px; border-radius:16px; border:1px solid var(--border);
+    background:var(--bg-2); color:var(--text-hi); font-size:16px; font-weight:700;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+  }
+  .audio-btn:active{ transform:scale(.97); }
+  .audio-btn .ic{ font-size:26px; }
+  .audio-btn.muted{ background:var(--red-d); border-color:var(--red); }
+  #vol-level{ text-align:center; font-size:14px; color:var(--text-lo); margin-top:10px; }
+
+  /* Hızlı erişim satırı */
+  .access-row{ display:flex; gap:12px; }
+  .access-btn{
+    flex:1; min-height:64px; border-radius:16px; border:1px solid var(--border);
+    background:var(--bg-2); color:var(--text-hi); font-size:15px; font-weight:700;
+    display:flex; align-items:center; justify-content:center; gap:10px; position:relative;
+  }
+  .access-btn:active{ transform:scale(.97); }
+  .access-btn .ic{ font-size:22px; }
+  .access-btn .dot{
+    position:absolute; top:10px; right:12px; min-width:20px; height:20px; padding:0 5px; border-radius:10px;
+    background:var(--red); color:#fff; font-size:11px; font-weight:800; display:none; align-items:center; justify-content:center;
+  }
+  .access-btn .dot.show{ display:flex; }
+
+  /* ---------- GELEN ÇAĞRI (tam ekran — küçültülemez, cevaplanmalı) ---------- */
+  #incoming-call{
+    position:fixed; inset:0; z-index:60; display:none; flex-direction:column;
+    align-items:center; justify-content:center; gap:20px;
+    background:radial-gradient(900px 500px at 50% 30%, #143a2a, var(--bg-0));
+  }
+  #incoming-call.show{ display:flex; }
+  #incoming-call .ic-avatar{
+    width:130px; height:130px; border-radius:50%; background:var(--green);
+    display:flex; align-items:center; justify-content:center; font-size:60px; color:#04180d;
+    animation:pulse 1.3s infinite;
+  }
+  @keyframes pulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(37,194,129,.5);} 50%{ box-shadow:0 0 0 28px rgba(37,194,129,0);} }
+  #incoming-call .ic-label{ font-size:15px; color:var(--text-lo); letter-spacing:3px; }
+  #ic-from{ font-size:52px; font-weight:900; }
+  .ic-actions{ display:flex; gap:70px; margin-top:24px; }
+  .ic-actions button{ width:104px; height:104px; border-radius:50%; border:none; font-size:44px; color:#fff; }
+  .ic-actions button:active{ transform:scale(.95); }
+  #ic-reject{ background:var(--red); } #ic-answer{ background:var(--green); color:#04180d; }
+  .ic-actions .lbl{ display:block; font-size:13px; margin-top:10px; color:var(--text-lo); text-align:center; }
+
+  /* ---------- AKTİF GÖRÜŞME PANELİ (küçültülebilir) ---------- */
+  #active-call{
+    position:fixed; inset:0; z-index:58; display:none; flex-direction:column;
+    align-items:center; justify-content:center; gap:18px;
+    background:radial-gradient(900px 500px at 50% 30%, #10233f, var(--bg-0));
+  }
+  #active-call.show{ display:flex; }
+  #ac-minimize{
+    position:absolute; top:22px; right:22px; background:var(--bg-2); border:1px solid var(--border);
+    color:var(--text-hi); border-radius:14px; padding:14px 20px; font-size:15px; font-weight:700;
+    display:flex; align-items:center; gap:10px;
+  }
+  #ac-minimize:active{ transform:scale(.97); }
+  #active-call .ac-avatar{
+    width:120px; height:120px; border-radius:50%; background:var(--accent);
+    display:flex; align-items:center; justify-content:center; font-size:54px;
+  }
+  #ac-state{ font-size:15px; color:var(--text-lo); letter-spacing:3px; }
+  #ac-peer{ font-size:48px; font-weight:900; }
+  #ac-timer{ font-size:24px; color:var(--green); font-weight:700; }
+  .ac-vol-row{ display:flex; gap:14px; margin-top:10px; }
+  .ac-vol-row .audio-btn{ width:150px; }
+  #ac-vol-level{ font-size:14px; color:var(--text-lo); }
+  #ac-hangup{
+    margin-top:18px; padding:22px 56px; border-radius:18px; border:none;
+    background:var(--red); color:#fff; font-size:22px; font-weight:800;
+    display:flex; align-items:center; gap:12px;
+  }
+  #ac-hangup:active{ transform:scale(.98); }
+
+  /* ---------- KÜÇÜLTÜLMÜŞ ÇAĞRI ÇUBUĞU (arka planda) ---------- */
+  #call-pill{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(160%);
+    z-index:57; width:min(560px,92vw); background:var(--bg-1); border:1px solid var(--green);
+    border-radius:18px; padding:14px 18px; display:flex; align-items:center; gap:16px;
+    box-shadow:0 18px 46px rgba(0,0,0,.55); transition:transform .25s ease;
+  }
+  #call-pill.show{ transform:translateX(-50%) translateY(0); }
+  #call-pill .cp-dot{ width:14px; height:14px; border-radius:50%; background:var(--green); animation:blink 1.2s infinite; flex:none; }
+  @keyframes blink{ 0%,100%{opacity:1;} 50%{opacity:.3;} }
+  #call-pill .cp-info{ flex:1; min-width:0; }
+  #call-pill .cp-peer{ font-size:18px; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #call-pill .cp-meta{ font-size:12px; color:var(--text-lo); }
+  #cp-expand{ background:var(--bg-2); border:1px solid var(--border); color:var(--text-hi); border-radius:12px; padding:12px 16px; font-size:14px; font-weight:700; flex:none; }
+  #cp-hangup{ background:var(--red); border:none; color:#fff; border-radius:12px; padding:12px 16px; font-size:14px; font-weight:800; flex:none; }
+  #call-pill button:active{ transform:scale(.96); }
+
+  /* ---------- VOICEMAIL ---------- */
+  #vm-modal{ position:fixed; inset:0; background:rgba(4,8,20,.82); z-index:62; display:none; align-items:center; justify-content:center; }
+  #vm-modal.show{ display:flex; }
+  #vm-box{ background:var(--bg-1); border:1px solid var(--border); border-radius:18px; padding:26px 28px; width:min(560px,92vw); max-height:80vh; overflow:auto; }
+  #vm-title{ font-size:21px; font-weight:800; } #vm-sub{ font-size:13px; color:var(--text-lo); margin:8px 0 18px; }
+  .vm-item{ display:flex; align-items:center; gap:12px; padding:13px; margin-bottom:11px; background:var(--bg-2); border-radius:12px; }
+  .vm-item .vm-meta{ flex:1; } .vm-item .vm-from{ font-weight:700; } .vm-item .vm-when{ font-size:11px; color:var(--text-lo); }
+  .vm-item audio{ height:34px; }
+  .vm-item button{ background:rgba(229,72,77,.15); color:#ff9a9a; border:1px solid rgba(229,72,77,.4); border-radius:8px; padding:7px 12px; }
+  #vm-close{ margin-top:6px; float:right; background:var(--accent); color:#fff; border:none; border-radius:12px; padding:12px 26px; font-weight:700; }
+
+  /* ---------- SES AYGITLARI SHEET ---------- */
+  #overlay{ position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:54; display:none; }
+  #overlay.open{ display:block; }
+  #dev-sheet{
+    position:fixed; left:50%; top:50%; transform:translate(-50%,-50%) scale(.96);
+    width:min(620px,94vw); max-height:82vh; background:var(--bg-1); border:1px solid var(--border);
+    border-radius:20px; z-index:55; display:none; flex-direction:column; overflow:hidden;
+  }
+  #dev-sheet.open{ display:flex; transform:translate(-50%,-50%) scale(1); }
+  .sheet-head{ display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid var(--border); }
+  .sheet-head .t{ font-size:17px; font-weight:800; }
+  .sheet-close{ background:var(--bg-2); border:1px solid var(--border); color:var(--text-hi); border-radius:12px; padding:9px 14px; }
+  .sheet-body{ padding:16px 22px; overflow:auto; }
+  .device-row{ display:flex; align-items:center; gap:12px; padding:13px; border-radius:14px; background:var(--bg-2); margin-bottom:11px; }
+  .device-icon{ font-size:24px; } .device-name{ font-weight:700; } .device-sub{ font-size:11px; color:var(--text-lo); }
+  .badge{ margin-left:auto; font-size:10px; padding:5px 9px; border-radius:7px; background:var(--bg-0); color:var(--text-lo); }
+  .kind-out{ margin-left:auto; font-size:10px; padding:5px 9px; border-radius:7px; background:rgba(37,194,129,.15); color:var(--green); }
+  .empty-state{ text-align:center; color:var(--text-lo); padding:32px 10px; } .empty-state .ic{ font-size:34px; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-card">
+    <h1>VCS <span style="color:var(--gold)">Panel</span></h1>
+    <div class="sub">İşlem yapabilmek için operatör kimliğinle giriş yap.</div>
+    <div class="login-field"><label>Kullanıcı Adı</label><input id="login-username" type="text" autocomplete="username"></div>
+    <div class="login-field"><label>Şifre</label><input id="login-password" type="password" autocomplete="current-password"></div>
+    <button id="login-btn" onclick="panelLogin()">Giriş Yap</button>
+    <div id="login-error"></div>
+    <div id="login-panel-id">PANEL: <span id="login-panel-code">—</span> &nbsp;·&nbsp; <span id="server-status">durum kontrol ediliyor...</span></div>
+  </div>
+</div>
+
+<!-- GELEN ÇAĞRI -->
+<div id="incoming-call">
+  <div class="ic-avatar">☎</div>
+  <div class="ic-label">GELEN ÇAĞRI</div>
+  <div id="ic-from">—</div>
+  <div class="ic-actions">
+    <div><button id="ic-reject" onclick="callReject()">✕</button><span class="lbl">Reddet</span></div>
+    <div><button id="ic-answer" onclick="callAnswer()">✓</button><span class="lbl">Cevapla</span></div>
+  </div>
+</div>
+
+<!-- AKTİF GÖRÜŞME PANELİ -->
+<div id="active-call">
+  <button id="ac-minimize" onclick="minimizeCall()">▾ Arka Plana Al</button>
+  <div class="ac-avatar">🎧</div>
+  <div id="ac-state">GÖRÜŞME SÜRÜYOR</div>
+  <div id="ac-peer">—</div>
+  <div id="ac-timer">00:00</div>
+  <div class="ac-vol-row">
+    <button class="audio-btn" id="ac-vol-down"><span class="ic">🔉</span>Kıs</button>
+    <button class="audio-btn" id="ac-vol-mute"><span class="ic">🔇</span>Sustur</button>
+    <button class="audio-btn" id="ac-vol-up"><span class="ic">🔊</span>Aç</button>
+  </div>
+  <div id="ac-vol-level">Ses: —</div>
+  <button id="ac-hangup" onclick="callHangup()">✕ Görüşmeyi Kapat</button>
+</div>
+
+<!-- KÜÇÜLTÜLMÜŞ ÇAĞRI ÇUBUĞU -->
+<div id="call-pill">
+  <div class="cp-dot"></div>
+  <div class="cp-info">
+    <div class="cp-peer" id="cp-peer">—</div>
+    <div class="cp-meta" id="cp-meta">Görüşme sürüyor</div>
+  </div>
+  <button id="cp-expand" onclick="expandCall()">▴ Aç</button>
+  <button id="cp-hangup" onclick="callHangup()">✕ Kapat</button>
+</div>
+
+<!-- VOICEMAIL -->
+<div id="vm-modal">
+  <div id="vm-box">
+    <div id="vm-title">📮 Sesli Mesajlar</div>
+    <div id="vm-sub"></div>
+    <div id="vm-list"></div>
+    <div style="overflow:hidden"><button id="vm-close" onclick="closeVoicemail()">Kapat</button></div>
+  </div>
+</div>
+
+<!-- SES AYGITLARI SHEET -->
+<div id="overlay"></div>
+<div id="dev-sheet">
+  <div class="sheet-head"><span class="t">🔊 Ses Aygıtları</span><button class="sheet-close" id="dev-close">Kapat</button></div>
+  <div class="sheet-body" id="device-list"></div>
+</div>
+
+<!-- ANA EKRAN -->
+<div id="app">
+  <div id="topbar">
+    <div class="brand">VCS <small id="tb-panel">—</small></div>
+    <div class="spacer"></div>
+    <div class="op-badge">
+      <span class="op-avatar" id="op-avatar">?</span>
+      <span><div class="op-name" id="op-name">—</div><div class="op-role" id="op-role">—</div></span>
+    </div>
+    <div class="clock"><div class="t" id="clock">--:--</div><div class="d" id="dateline">--</div></div>
+    <button id="btn-logout" onclick="panelLogout()">⏻ Çıkış</button>
+  </div>
+
+  <div id="main">
+    <!-- SOL: Numara çevir -->
+    <div class="col left">
+      <div class="card" style="flex:1; display:flex; flex-direction:column;">
+        <h2>Numara Çevir</h2>
+        <input id="dialpad-input" type="text" inputmode="none" placeholder="1005">
+        <div class="dialpad-grid" id="dpad-keys"></div>
+        <div class="dialpad-actions">
+          <button id="dpad-back">⌫</button>
+          <button id="dpad-call">📞 Ara</button>
+        </div>
+        <div id="dialpad-error"></div>
+      </div>
+    </div>
+
+    <!-- SAĞ: Hızlı arama + ses + hızlı erişim -->
+    <div class="col right">
+      <div class="card">
+        <h2>Hızlı Arama</h2>
+        <div class="quick-grid" id="quick-grid"></div>
+      </div>
+      <div class="card">
+        <h2>Gelen Ses Seviyesi</h2>
+        <div class="audio-row">
+          <button class="audio-btn" id="vol-down"><span class="ic">🔉</span>Kıs</button>
+          <button class="audio-btn" id="vol-mute"><span class="ic">🔇</span>Sustur</button>
+          <button class="audio-btn" id="vol-up"><span class="ic">🔊</span>Aç</button>
+        </div>
+        <div id="vol-level">Ses: —</div>
+      </div>
+      <div class="card">
+        <h2>Hızlı Erişim</h2>
+        <div class="access-row">
+          <button class="access-btn" id="btn-voicemail"><span class="ic">📮</span>Sesli Mesaj<span class="dot" id="vm-dot"></span></button>
+          <button class="access-btn" id="btn-devices"><span class="ic">🎚</span>Ses Aygıtları</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ==========================================================
+  // YAPILANDIRMA — URL'den okunur:
+  //   panel_app.html?panel=1005&core=http://10.1.60.8:8091
+  // ==========================================================
+  var qs = new URLSearchParams(location.search);
+  var PANEL_CODE = qs.get("panel") || "1005";
+  var YONETIM_SERVISI_URL = qs.get("core") || "http://10.1.60.8:8091";
+  var LOCAL_BACKEND_URL = qs.get("backend") || "http://localhost:8090";
+  var DEMO = qs.has("demo");
+
+  // Hızlı arama butonları — { label, sub, target }. Panel-SIP modelinde
+  // hedef, aranan PANELİN numarasıdır.
+  var QUICK_CALLS = [
+    { label: "Komutan",  sub: "1001", target: "1001" },
+    { label: "Astsubay", sub: "1005", target: "1005" },
+    { label: "Nöbetçi",  sub: "1002", target: "1002" },
+    { label: "Test PC",  sub: "1009", target: "1009" }
+  ];
+
+  document.getElementById("login-panel-code").textContent = PANEL_CODE;
+  document.getElementById("tb-panel").textContent = PANEL_CODE;
+
+  var session = null;
+
+  // ---- Sunucu erişilebilirliği ----
+  function checkServerStatus(){
+    var el = document.getElementById("server-status");
+    fetch(YONETIM_SERVISI_URL + "/healthz").then(function(r){
+      if (r.ok){ el.textContent = "Sunucu hazır"; el.className = "ok"; }
+      else { el.textContent = "Sunucuya ulaşılamıyor"; el.className = "fail"; }
+    }).catch(function(){ el.textContent = "Sunucuya ulaşılamıyor"; el.className = "fail"; });
+  }
+  checkServerStatus(); setInterval(checkServerStatus, 10000);
+
+  // ---- Giriş / Çıkış ----
+  function showLoggedInUI(){
+    document.getElementById("login-screen").style.display = "none";
+    document.getElementById("app").classList.add("show");
+    document.getElementById("op-avatar").textContent = (session.username||"?").slice(0,2).toUpperCase();
+    document.getElementById("op-name").textContent = session.username;
+    document.getElementById("op-role").textContent = session.role;
+    if (DEMO){
+      document.getElementById("vol-level").textContent = "Ses: %65";
+      var acv = document.getElementById("ac-vol-level"); if (acv) acv.textContent = "Ses: %65";
+      return;
+    }
+    startWatch();
+    checkVoicemail();
+    refreshVolume();
+  }
+  function notifyBackendLogin(token){
+    fetch(LOCAL_BACKEND_URL + "/api/session", {
+      method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ yonetim_servisi_url: YONETIM_SERVISI_URL, token: token })
+    }).catch(function(){});
+  }
+  function notifyBackendLogout(){ fetch(LOCAL_BACKEND_URL + "/api/session/logout", { method:"POST" }).catch(function(){}); }
+
+  function panelLogin(){
+    var u = document.getElementById("login-username").value.trim();
+    var p = document.getElementById("login-password").value;
+    var err = document.getElementById("login-error"); err.textContent = "";
+    if (!u || !p){ err.textContent = "Kullanıcı adı ve şifre gerekli."; return; }
+    fetch(YONETIM_SERVISI_URL + "/api/login", {
+      method:"POST", body: JSON.stringify({ username:u, password:p, panel_code:PANEL_CODE })
+    }).then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||"Giriş başarısız."); return d; }); })
+    .then(function(d){
+      // Yetki kontrolü artık SUNUCUDA yapılıyor (açık giriş: her kullanıcı her
+      // panele girebilir; RNVCS_ENFORCE_PANEL_LOGIN=1 ise sunucu 403 döner ve
+      // yukarıdaki catch bloğu hatayı gösterir). İstemcide ayrıca engel yok.
+      session = d;
+      sessionStorage.setItem("rnvcs_panel_session", JSON.stringify(d));
+      showLoggedInUI();
+      notifyBackendLogin(d.token);
+    }).catch(function(e){ err.textContent = e.message || "Giriş başarısız."; });
+  }
+  function panelLogout(){
+    var token = session && session.token;
+    stopWatch();
+    if (token){ fetch(YONETIM_SERVISI_URL + "/api/logout", { method:"POST", headers:{ "Authorization":"Bearer "+token } }).catch(function(){}); }
+    notifyBackendLogout();
+    session = null; sessionStorage.removeItem("rnvcs_panel_session");
+    document.getElementById("login-username").value = "";
+    document.getElementById("login-password").value = "";
+    document.getElementById("app").classList.remove("show");
+    document.getElementById("login-screen").style.display = "flex";
+  }
+  window.panelLogin = panelLogin; window.panelLogout = panelLogout;
+
+  // ---- Oturum geçerlilik + çağrı izleme ----
+  var sessTimer = null, callTimer = null;
+  function checkSessionValidity(){
+    if (!session || !session.token) return;
+    fetch(YONETIM_SERVISI_URL + "/api/my-panel-sip-credentials", { headers:{ "Authorization":"Bearer "+session.token } })
+      .then(function(r){ if (r.status === 401){ panelLogout(); document.getElementById("login-error").textContent = "Oturumunuz başka bir panelden yapılan girişle sonlandırıldı."; } })
+      .catch(function(){});
+  }
+  function startWatch(){
+    stopWatch();
+    sessTimer = setInterval(checkSessionValidity, 15000);
+    callTimer = setInterval(checkCallStatus, 1000);
+  }
+  function stopWatch(){
+    if (sessTimer){ clearInterval(sessTimer); sessTimer=null; }
+    if (callTimer){ clearInterval(callTimer); callTimer=null; }
+    hideAllCallUI();
+  }
+
+  // ---- Çağrı paneli göster/küçült durumu ----
+  var callMinimized = false;
+  function hideAllCallUI(){
+    document.getElementById("incoming-call").classList.remove("show");
+    document.getElementById("active-call").classList.remove("show");
+    document.getElementById("call-pill").classList.remove("show");
+  }
+  function minimizeCall(){
+    callMinimized = true;
+    document.getElementById("active-call").classList.remove("show");
+    document.getElementById("call-pill").classList.add("show");
+  }
+  function expandCall(){
+    callMinimized = false;
+    document.getElementById("call-pill").classList.remove("show");
+    document.getElementById("active-call").classList.add("show");
+  }
+  window.minimizeCall = minimizeCall; window.expandCall = expandCall;
+
+  // ---- Çağrı durumu (idle | ringing | dialing | active) ----
+  var lastState = "idle", callStartTs = 0;
+  function fmtDur(sec){ var m=Math.floor(sec/60), s=sec%60; return (m<10?"0":"")+m+":"+(s<10?"0":"")+s; }
+  function checkCallStatus(){
+    fetch(LOCAL_BACKEND_URL + "/api/call/status").then(function(r){ return r.json(); }).then(function(st){
+      var inc = document.getElementById("incoming-call");
+      var act = document.getElementById("active-call");
+      var pill = document.getElementById("call-pill");
+
+      if (st.state === "ringing"){
+        // Gelen çağrı her zaman tam ekran — küçültülemez (cevaplanmalı).
+        document.getElementById("ic-from").textContent = st.from || "Bilinmeyen";
+        inc.classList.add("show"); act.classList.remove("show"); pill.classList.remove("show");
+        callMinimized = false;
+      } else if (st.state === "active" || st.state === "dialing"){
+        inc.classList.remove("show");
+        var peer = st.from || (lastDialTarget || "");
+        var stateTxt = st.state === "dialing" ? "ARANIYOR" : "GÖRÜŞME SÜRÜYOR";
+        document.getElementById("ac-state").textContent = stateTxt;
+        document.getElementById("ac-peer").textContent = peer;
+        if (st.state !== lastState && (st.state === "active")){ callStartTs = Date.now(); refreshVolume(); }
+        if (lastState === "idle"){ refreshVolume(); }
+        var durTxt = "";
+        if (st.state === "active"){ durTxt = fmtDur(Math.floor((Date.now()-callStartTs)/1000)); }
+        var tEl = document.getElementById("ac-timer");
+        tEl.style.display = st.state === "active" ? "block" : "none";
+        tEl.textContent = durTxt;
+        // Küçültülmüş çubuğu güncelle
+        document.getElementById("cp-peer").textContent = peer;
+        document.getElementById("cp-meta").textContent = st.state === "dialing" ? "Aranıyor…" : (durTxt ? ("Görüşme · " + durTxt) : "Görüşme sürüyor");
+        // Küçültülmüş mü, tam mı?
+        if (callMinimized){ act.classList.remove("show"); pill.classList.add("show"); }
+        else { act.classList.add("show"); pill.classList.remove("show"); }
+      } else {
+        // idle — çağrı bitti
+        hideAllCallUI();
+        callMinimized = false;
+      }
+      lastState = st.state;
+    }).catch(function(){});
+  }
+  function callAnswer(){ fetch(LOCAL_BACKEND_URL + "/api/call/answer", { method:"POST" }).catch(function(){}); }
+  function callReject(){ fetch(LOCAL_BACKEND_URL + "/api/call/reject", { method:"POST" }).catch(function(){}); }
+  function callHangup(){ callMinimized = false; fetch(LOCAL_BACKEND_URL + "/api/call/hangup", { method:"POST" }).catch(function(){}); }
+  window.callAnswer=callAnswer; window.callReject=callReject; window.callHangup=callHangup;
+
+  // ---- Arama başlat (hızlı buton + dialpad ortak) ----
+  var lastDialTarget = "";
+  function dial(target){
+    target = (target||"").trim();
+    var err = document.getElementById("dialpad-error"); err.textContent = "";
+    if (!target){ err.textContent = "Aranacak numara girin."; return; }
+    lastDialTarget = target;
+    callMinimized = false; // yeni arama tam ekran açılsın
+    fetch(LOCAL_BACKEND_URL + "/api/call/dial", {
+      method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ target: target })
+    }).then(function(r){ if(!r.ok) return r.text().then(function(t){ throw new Error(t||("HTTP "+r.status)); }); })
+    .catch(function(e){ err.textContent = e.message || "Arama başlatılamadı."; });
+  }
+
+  // ---- Hızlı arama butonları ----
+  var qg = document.getElementById("quick-grid");
+  QUICK_CALLS.forEach(function(qc){
+    var b = document.createElement("button");
+    b.className = "quick-btn";
+    b.innerHTML = '<span class="qn">'+qc.label+'</span><span class="qt">'+(qc.sub||qc.target)+'</span><span class="call-ic">📞</span>';
+    b.addEventListener("click", function(){ dial(qc.target); });
+    qg.appendChild(b);
+  });
+
+  // ---- Dialpad ----
+  var dpInput = document.getElementById("dialpad-input");
+  var keys = ["1","2","3","4","5","6","7","8","9","*","0","#"];
+  var dk = document.getElementById("dpad-keys");
+  keys.forEach(function(k){
+    var b = document.createElement("button"); b.className="dpad-key"; b.textContent=k;
+    b.addEventListener("click", function(){ dpInput.value += k; });
+    dk.appendChild(b);
+  });
+  document.getElementById("dpad-back").addEventListener("click", function(){ dpInput.value = dpInput.value.slice(0,-1); });
+  document.getElementById("dpad-call").addEventListener("click", function(){ dial(dpInput.value); });
+
+  // ---- Ses seviyesi ----
+  function applyVolUI(v){
+    var txt, muted = false;
+    if (v && typeof v.volume === "number"){
+      muted = !!v.muted;
+      txt = muted ? "Ses: KAPALI" : ("Ses: %" + v.volume);
+    } else { txt = "Ses kontrolü kullanılamıyor"; }
+    ["vol-level","ac-vol-level"].forEach(function(id){ var el=document.getElementById(id); if(el) el.textContent = txt; });
+    ["vol-mute","ac-vol-mute"].forEach(function(id){ var el=document.getElementById(id); if(el) el.classList.toggle("muted", muted); });
+  }
+  function refreshVolume(){
+    fetch(LOCAL_BACKEND_URL + "/api/volume").then(function(r){ return r.ok ? r.json() : null; }).then(applyVolUI).catch(function(){ applyVolUI(null); });
+  }
+  function volAction(action){
+    fetch(LOCAL_BACKEND_URL + "/api/volume", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ action: action }) })
+      .then(function(r){ return r.ok ? r.json() : null; }).then(applyVolUI).catch(function(){});
+  }
+  document.getElementById("vol-up").addEventListener("click", function(){ volAction("up"); });
+  document.getElementById("vol-down").addEventListener("click", function(){ volAction("down"); });
+  document.getElementById("vol-mute").addEventListener("click", function(){ volAction("mute"); });
+  document.getElementById("ac-vol-up").addEventListener("click", function(){ volAction("up"); });
+  document.getElementById("ac-vol-down").addEventListener("click", function(){ volAction("down"); });
+  document.getElementById("ac-vol-mute").addEventListener("click", function(){ volAction("mute"); });
+
+  // ---- Ses aygıtları ----
+  var overlay = document.getElementById("overlay");
+  var devSheet = document.getElementById("dev-sheet");
+  var TRANSPORT_ICON = { USB:"🔌", ANALOG:"🎚", HDMI:"🖵", BLUETOOTH:"📶" };
+  var devPoll = null;
+  function renderDevices(devices, errMsg){
+    var list = document.getElementById("device-list"); list.innerHTML = "";
+    if (errMsg){ list.innerHTML = '<div class="empty-state"><div class="ic">⚠</div><div>'+errMsg+'</div></div>'; return; }
+    if (!devices || !devices.length){ list.innerHTML = '<div class="empty-state"><div class="ic">🔈</div><div>Henüz ses aygıtı algılanmadı</div></div>'; return; }
+    devices.forEach(function(d){
+      var row = document.createElement("div"); row.className = "device-row";
+      var icon = TRANSPORT_ICON[d.transport] || "🔈";
+      var yon = d.kind === "OUTPUT" ? "Çıkış" : "Giriş";
+      row.innerHTML = '<div class="device-icon">'+icon+'</div>'+
+        '<div><div class="device-name">'+d.display_name+'</div>'+
+        '<div class="device-sub">'+d.transport+' · '+yon+' · node '+d.pipewire_node_id+'</div></div>'+
+        (d.kind === "OUTPUT" ? '<span class="kind-out">ÇIKIŞ</span>' : '<span class="badge">GİRİŞ</span>');
+      list.appendChild(row);
+    });
+  }
+  function fetchDevices(){
+    fetch(LOCAL_BACKEND_URL + "/api/audio-devices", { cache:"no-store" })
+      .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+      .then(function(d){ renderDevices(d, null); })
+      .catch(function(){ renderDevices(null, "Panel arka servisine ulaşılamadı (rnvcs-panel-backend çalışıyor mu?)"); });
+  }
+  function openDevices(){ devSheet.classList.add("open"); overlay.classList.add("open"); fetchDevices(); if(devPoll) clearInterval(devPoll); devPoll = setInterval(fetchDevices, 2000); }
+  function closeDevices(){ devSheet.classList.remove("open"); overlay.classList.remove("open"); if(devPoll){ clearInterval(devPoll); devPoll=null; } }
+  document.getElementById("btn-devices").addEventListener("click", openDevices);
+  document.getElementById("dev-close").addEventListener("click", closeDevices);
+  overlay.addEventListener("click", closeDevices);
+
+  // ---- Sesli mesaj ----
+  var vmCache = [];
+  function vmDate(u){ if(!u) return ""; try{ return new Date(u*1000).toLocaleString("tr-TR"); }catch(e){ return ""; } }
+  function checkVoicemail(){
+    if (!session || !session.token) return;
+    fetch(YONETIM_SERVISI_URL + "/api/voicemail?panel_code=" + encodeURIComponent(PANEL_CODE), { headers:{ "Authorization":"Bearer "+session.token } })
+      .then(function(r){ return r.ok ? r.json() : []; }).then(function(list){
+        vmCache = list||[];
+        var dot = document.getElementById("vm-dot");
+        if (vmCache.length){ dot.textContent = vmCache.length; dot.classList.add("show"); }
+        else { dot.classList.remove("show"); }
+      }).catch(function(){});
+  }
+  function openVoicemail(){
+    if (!vmCache.length){
+      document.getElementById("vm-sub").textContent = "Bu panele bırakılmış sesli mesaj yok.";
+      document.getElementById("vm-list").innerHTML = '<div class="empty-state"><div class="ic">📭</div><div>Sesli mesaj yok</div></div>';
+      document.getElementById("vm-modal").classList.add("show");
+      return;
+    }
+    renderVoicemail(vmCache);
+  }
+  function renderVoicemail(list){
+    document.getElementById("vm-sub").textContent = "Panel boştayken " + list.length + " arama mesaj bıraktı. Dinleyip silebilirsiniz.";
+    var box = document.getElementById("vm-list"); box.innerHTML = "";
+    list.forEach(function(m){
+      var url = YONETIM_SERVISI_URL + "/api/voicemail/audio?panel_code=" + encodeURIComponent(PANEL_CODE) + "&id=" + encodeURIComponent(m.id) + "&token=" + encodeURIComponent(session.token);
+      var row = document.createElement("div"); row.className = "vm-item";
+      row.innerHTML = '<div class="vm-meta"><div class="vm-from">Arayan: '+(m.caller_id||"Bilinmeyen")+'</div><div class="vm-when">'+vmDate(m.origtime)+' · '+(m.duration||0)+' sn</div></div>';
+      var a = document.createElement("audio"); a.controls = true; a.src = url; row.appendChild(a);
+      var del = document.createElement("button"); del.textContent = "Sil"; del.onclick = function(){ deleteVoicemail(m.id, row); }; row.appendChild(del);
+      box.appendChild(row);
+    });
+    document.getElementById("vm-modal").classList.add("show");
+  }
+  function deleteVoicemail(id, rowEl){
+    fetch(YONETIM_SERVISI_URL + "/api/voicemail?panel_code=" + encodeURIComponent(PANEL_CODE) + "&id=" + encodeURIComponent(id), { method:"DELETE", headers:{ "Authorization":"Bearer "+session.token } })
+      .then(function(r){ if (r.ok){ vmCache = vmCache.filter(function(x){ return x.id !== id; }); if (rowEl && rowEl.parentNode){ rowEl.parentNode.removeChild(rowEl); } checkVoicemail(); if (!document.getElementById("vm-list").children.length) closeVoicemail(); } }).catch(function(){});
+  }
+  function closeVoicemail(){ document.getElementById("vm-modal").classList.remove("show"); document.getElementById("vm-list").querySelectorAll("audio").forEach(function(a){ try{ a.pause(); }catch(e){} }); }
+  window.closeVoicemail = closeVoicemail;
+  document.getElementById("btn-voicemail").addEventListener("click", openVoicemail);
+  setInterval(checkVoicemail, 30000);
+
+  // ---- Saat ----
+  var AYLAR = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+  function tick(){
+    var d = new Date();
+    document.getElementById("clock").textContent = String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+    document.getElementById("dateline").textContent = d.getDate()+" "+AYLAR[d.getMonth()]+" "+d.getFullYear();
+  }
+  tick(); setInterval(tick, 1000);
+
+  // ---- Vitrin modu ----
+  if (DEMO){
+    session = { username:"ahmet", role:"OPERATOR", token:"demo", panels:[{ panel_code:PANEL_CODE }] };
+    showLoggedInUI();
+  }
+
+  // ---- Oturum geri yükleme ----
+  (function(){
+    if (DEMO) return;
+    var raw = sessionStorage.getItem("rnvcs_panel_session");
+    if (!raw) return;
+    try { session = JSON.parse(raw); showLoggedInUI(); } catch(e){}
+  })();
+
+  document.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+})();
+</script>
+</body>
+</html>
