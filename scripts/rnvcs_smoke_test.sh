@@ -61,29 +61,47 @@ else
   fail "CORE /healthz'e ulaşılamadı (${CORE_HOST}:${CORE_PORT})"
 fi
 
-# ---------- 2) Panel-backend: ses seviyesi uç noktası ----------
-info "2) panel-backend /api/volume kontrol ediliyor..."
-if resp=$(curl -sf --max-time "$TIMEOUT" "http://${PANEL_HOST}:${PANEL_PORT}/api/volume" 2>&1); then
-  if echo "$resp" | grep -qi "volume"; then
-    ok "panel-backend /api/volume beklenen alanı içeriyor"
-  else
-    fail "panel-backend /api/volume cevap verdi ama beklenen 'volume' alanı yok — eski/yanlış binary olabilir (bkz. handbook §3.11)"
+# panel-backend, sadece fiziksel panel cihazında çalışan bir servistir (RNVCS mimarisi
+# gereği CORE/yedek CORE üzerinde bulunmaz). Bu makinede rnvcs-panel-backend.service
+# tanımlı değilse, panel-backend kontrollerini FAIL değil, bilinçli SKIP say.
+PANEL_BACKEND_EXPECTED=1
+if command -v systemctl >/dev/null 2>&1; then
+  if ! systemctl list-unit-files 2>/dev/null | grep -q '^rnvcs-panel-backend\.service'; then
+    PANEL_BACKEND_EXPECTED=0
   fi
+fi
+
+# ---------- 2) Panel-backend: ses seviyesi uç noktası ----------
+if [ "$PANEL_BACKEND_EXPECTED" -eq 0 ]; then
+  info "2) panel-backend /api/volume — bu makinede panel-backend servisi tanımlı değil, atlandı (beklenen: sadece panel cihazında çalışır)"
 else
-  fail "panel-backend /api/volume'e ulaşılamadı (${PANEL_HOST}:${PANEL_PORT}) — 404 dönüyorsa eski binary deploy edilmiş olabilir"
+  info "2) panel-backend /api/volume kontrol ediliyor..."
+  if resp=$(curl -sf --max-time "$TIMEOUT" "http://${PANEL_HOST}:${PANEL_PORT}/api/volume" 2>&1); then
+    if echo "$resp" | grep -qi "volume"; then
+      ok "panel-backend /api/volume beklenen alanı içeriyor"
+    else
+      fail "panel-backend /api/volume cevap verdi ama beklenen 'volume' alanı yok — eski/yanlış binary olabilir (bkz. handbook §3.11)"
+    fi
+  else
+    fail "panel-backend /api/volume'e ulaşılamadı (${PANEL_HOST}:${PANEL_PORT}) — 404 dönüyorsa eski binary deploy edilmiş olabilir"
+  fi
 fi
 
 # ---------- 3) Panel-backend: ses aygıtları uç noktası ----------
-info "3) panel-backend /api/audio-devices kontrol ediliyor..."
-if resp=$(curl -sf --max-time "$TIMEOUT" "http://${PANEL_HOST}:${PANEL_PORT}/api/audio-devices" 2>&1); then
-  dev_count=$(echo "$resp" | grep -o '"kind"' | wc -l)
-  if [ "$dev_count" -gt 0 ]; then
-    ok "panel-backend /api/audio-devices ${dev_count} cihaz döndürdü"
-  else
-    fail "panel-backend /api/audio-devices boş liste döndürdü — PipeWire/WirePlumber çalışmıyor olabilir"
-  fi
+if [ "$PANEL_BACKEND_EXPECTED" -eq 0 ]; then
+  info "3) panel-backend /api/audio-devices — bu makinede panel-backend servisi tanımlı değil, atlandı"
 else
-  fail "panel-backend /api/audio-devices'e ulaşılamadı"
+  info "3) panel-backend /api/audio-devices kontrol ediliyor..."
+  if resp=$(curl -sf --max-time "$TIMEOUT" "http://${PANEL_HOST}:${PANEL_PORT}/api/audio-devices" 2>&1); then
+    dev_count=$(echo "$resp" | grep -o '"kind"' | wc -l)
+    if [ "$dev_count" -gt 0 ]; then
+      ok "panel-backend /api/audio-devices ${dev_count} cihaz döndürdü"
+    else
+      fail "panel-backend /api/audio-devices boş liste döndürdü — PipeWire/WirePlumber çalışmıyor olabilir"
+    fi
+  else
+    fail "panel-backend /api/audio-devices'e ulaşılamadı"
+  fi
 fi
 
 # ---------- 4) PJSIP transport: 5060 dinleniyor mu ----------
