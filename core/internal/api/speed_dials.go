@@ -41,11 +41,12 @@ func validSpeedTarget(t string) bool {
 }
 
 // SpeedDials — kısayol yönetimi (Bölüm 10.19: kısayollar KULLANICIYA bağlı).
-//   GET    ?username=X        : listele (verilmezse oturum sahibinin kendisi)
-//   POST   {username?,label,target_type,target_value,position,color_hint}
-//          : kendi kısayolunu herkes ekleyebilir; başkası için ADMIN/MAINTAINER
-//   DELETE ?id=N              : kısayol sil (sahibi ya da ADMIN/MAINTAINER)
-//   PUT    {username?,ids:[]} : sıralama (position=indeks) — sahibi ya da ADMIN
+//
+//	GET    ?username=X        : listele (verilmezse oturum sahibinin kendisi)
+//	POST   {username?,label,target_type,target_value,position,color_hint}
+//	       : kendi kısayolunu herkes ekleyebilir; başkası için ADMIN/MAINTAINER
+//	DELETE ?id=N              : kısayol sil (sahibi ya da ADMIN/MAINTAINER)
+//	PUT    {username?,ids:[]} : sıralama (position=indeks) — sahibi ya da ADMIN
 func (h *Handler) SpeedDials(w http.ResponseWriter, r *http.Request) {
 	sess, ok := h.authenticate(r)
 	if !ok {

@@ -45,7 +45,7 @@ type userSummary struct {
 	FullName     string `json:"full_name"`
 	Role         string `json:"role"`
 	Enabled      bool   `json:"enabled"`
-	SipUsername  string `json:"sip_username"`   // boşsa SIP hesabı henüz tanımlanmamış
+	SipUsername  string `json:"sip_username"`    // boşsa SIP hesabı henüz tanımlanmamış
 	HasSipAccout bool   `json:"has_sip_account"` // SipPassword ASLA listede dönmez (güvenlik)
 }
 
