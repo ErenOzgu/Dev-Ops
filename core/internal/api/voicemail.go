@@ -54,7 +54,6 @@ func (h *Handler) Voicemail(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "oturum geçersiz, tekrar login olun")
 		return
 	}
-	
 
 	switch r.Method {
 	case http.MethodGet:
