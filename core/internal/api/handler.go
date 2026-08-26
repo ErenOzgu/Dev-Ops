@@ -14,10 +14,19 @@ type Handler struct {
 	db              *pg.DB
 	sessions        *auth.SessionStore
 	provisioningKey string
+	// amiAddr/amiUser/amiSecret — Asterisk AMI bağlantı bilgileri (Anons
+	// Sistemi FKT madde 4, konferans). Boşsa /api/conference 503 döner
+	// (bkz. conference.go) — konferans özelliği bu sunucuda kapalı demektir.
+	amiAddr   string
+	amiUser   string
+	amiSecret string
 }
 
-func NewHandler(db *pg.DB, provisioningKey string) *Handler {
-	return &Handler{db: db, sessions: auth.NewSessionStore(), provisioningKey: provisioningKey}
+func NewHandler(db *pg.DB, provisioningKey, amiAddr, amiUser, amiSecret string) *Handler {
+	return &Handler{
+		db: db, sessions: auth.NewSessionStore(), provisioningKey: provisioningKey,
+		amiAddr: amiAddr, amiUser: amiUser, amiSecret: amiSecret,
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {

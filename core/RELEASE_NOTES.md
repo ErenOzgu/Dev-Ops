@@ -1,5 +1,41 @@
 # RNVCS Yönetim Servisi — Sürüm Notları
 
+## v1.6.0 — 2026-08-25 (SIP kimliği kullanıcıya döndü + Anons Sistemi FKT)
+
+**SIP kimliği: panel-bazlı → kullanıcı-bazlı (Bölüm 10.22'nin tersine, 10.19'a dönüş)**
+- panel-backend artık `/api/my-sip-credentials` çağırıyor (`/api/my-panel-sip-credentials` değil) —
+  login olan kullanıcı hangi panelden girerse girsin KENDİ sip_username/sip_password'üyle
+  Asterisk'e REGISTER olur. Panel numaraları artık telefon numarası değil, sadece
+  panel_code/yetki etiketi.
+- `panels.go`: yeni PANEL tipi kayıtlar artık SIP register OLMUYOR (sadece sesli mesaj kutusu).
+- `internal/pjsip/writer.go`: `AppendEndpoint` artık İDEMPOTENT (işaretli blok deseniyle
+  eski kaydı silip yenisini yazıyor — tekrar tekrar çağrılırsa artık yinelenen blok oluşmuyor).
+  Yeni `RemoveEndpoint` — kullanıcı silindiğinde SIP bloğu da temizleniyor (`users.go`).
+- BKT'deki panel/senkron ipucu metinleri yeni modele göre güncellendi.
+
+**Anons Sistemi FKT (`5DEAZNSİDA44300010100_Anons_Sistemi_FKT_Prosedürü_v1.1.docx`, Rev.1) — karşılanan maddeler:**
+- **`voip_goster`**: `/usr/local/bin/voip_goster` artık `install_yonetim_servisi.sh` tarafından
+  otomatik kuruluyor (`pjsip show contacts` + `pjsip show endpoints`).
+- **Interkom / IP Horn provizyonu (madde 2)**: `panels.device_type` kolonu (PANEL/INTERKOM/
+  IP_HORN — migration 004). INTERKOM/IP_HORN kayıtları gerçek donanım olduğundan kendi PJSIP
+  endpoint'iyle register olur, voicemail fallback'siz sade `Dial()+Hangup()` extension'ı alır
+  (`dialplan.AppendDeviceExtension`). BKT "Paneller" sekmesine Cihaz Tipi seçimi eklendi.
+- **Ring group cihaz-agnostikliği (madde 3)**: `POST /api/ring-groups` artık `members: [{type,code}]`
+  kabul ediyor (`type`: USER/PANEL/INTERKOM/IP_HORN) — bir çatal arama grubuna kullanıcıların
+  yanı sıra Interkom/IP Horn da eklenebilir.
+- **IP Horn butonu (madde 5)**: `speed_dials.target_type` artık INTERKOM/IP_HORN/CONFERENCE de
+  kabul ediyor — ek şema değişikliği gerekmedi.
+- **Konferans (madde 4)**: yeni `POST /api/conference` (`internal/api/conference.go`) — AMI
+  (`internal/ami`, sıfır bağımlılıklı) üzerinden `Originate` ile katılımcıları çağırıp
+  `internal/confbridge` ile yazılan dinamik `ConfBridge()` odasına bağlıyor. AMI SADECE
+  localhost'a bind edilir (`RNVCS_AMI_ADDR/USER/SECRET` env değişkenleri, `install_yonetim_servisi.sh`
+  `manager.conf`'u ve varsayılan `confbridge.conf` profillerini otomatik kuruyor). Oturumlar
+  `conference_sessions` tablosunda tutuluyor (migration 004).
+
+Gerekli manuel adım: `core_migration_004_annon_devices.sql`'i mevcut CORE'a elle uygula
+(core_migrate.sh 003/004'ü otomatik aramıyor — bkz. dosyanın kendi başlığı).
+
+
 Bundan sonra her zip bir sürüm numarasıyla etiketlenecek (`VERSION` dosyası +
 zip dosya adı, ör. `rnvcs-yonetim-servisi-v1.3.0.zip`). Bakım Terminali'nin
 başlığında da çalışan sürüm görünür (`GET /api/version`) — hangi zip'in

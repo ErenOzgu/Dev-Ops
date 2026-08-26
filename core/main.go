@@ -131,7 +131,18 @@ func main() {
 		return
 	}
 
-	h := api.NewHandler(dbConn, provisioningKey)
+	// Anons Sistemi FKT madde 4 (konferans) — AMI bağlantı bilgileri
+	// OPSİYONEL: tanımlı değilse /api/conference 503 döner, geri kalan
+	// hiçbir şey etkilenmez. Varsayılan adres localhost — AMI dışarı
+	// açılmıyor (bkz. manager.conf'ta bindaddr=127.0.0.1).
+	amiAddr := os.Getenv("RNVCS_AMI_ADDR")
+	if amiAddr == "" {
+		amiAddr = "127.0.0.1:5038"
+	}
+	amiUser := os.Getenv("RNVCS_AMI_USER")
+	amiSecret := os.Getenv("RNVCS_AMI_SECRET")
+
+	h := api.NewHandler(dbConn, provisioningKey, amiAddr, amiUser, amiSecret)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", h.Healthz)
@@ -156,6 +167,9 @@ func main() {
 	mux.HandleFunc("/api/speed-dials", h.SpeedDials)
 	mux.HandleFunc("/api/iax-trunks", h.IAXTrunks)
 	mux.HandleFunc("/api/events", h.Events)
+	mux.HandleFunc("/api/conference", h.Conference)
+	mux.HandleFunc("/api/sayfam-tiles", h.SayfamTiles)
+	mux.HandleFunc("/api/sayfam-searches", h.SayfamSearches)
 	// Bakım/Kontrol Terminali (Web UI) — kök yolda sunulur.
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {

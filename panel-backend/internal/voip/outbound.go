@@ -94,7 +94,7 @@ func (e *Engine) Dial(targetExt string) error {
 
 	cseq := 1
 	msg := buildInviteReqWithVia(viaLine, toURI, fromURI, contact, callID, fromTag, cseq, "", sdpOffer)
-	finalResp, err := e.inviteTransaction(conn, remoteAddr, msg)
+	finalResp, err := e.inviteTransaction(conn, remoteAddr, msg, callID)
 
 	// YARIŞ KORUMASI: bu inviteTransaction() 30 saniyeye kadar sürebilir.
 	// Bu sırada operatör CANCEL ile vazgeçip HEMEN başka bir çağrı
@@ -165,7 +165,7 @@ func (e *Engine) Dial(targetExt string) error {
 		e.mu.Unlock()
 
 		retryMsg := buildInviteReqWithVia(viaLine, toURI, fromURI, contact, callID, fromTag, cseq, authHeader, sdpOffer)
-		retryResp, err := e.inviteTransaction(conn, remoteAddr, retryMsg)
+		retryResp, err := e.inviteTransaction(conn, remoteAddr, retryMsg, callID)
 		if !e.stillOurDial(callID) {
 			rtpConn.Close()
 			return fmt.Errorf("çağrı bu sırada iptal edildi ya da değişti")
@@ -272,27 +272,28 @@ func buildByeForAbandonedDial(toURI, fromURI, contact, localHostPort, callID, fr
 // yanıtları görmezden gelip FİNAL yanıtı (>=200) bekler. Çağrı çalarken
 // (180 Ringing) uzun sürebileceği için her provizyonel yanıtta zaman aşımı
 // süresi sıfırlanır.
-func (e *Engine) inviteTransaction(conn *net.UDPConn, remote *net.UDPAddr, msg string) (string, error) {
+func (e *Engine) inviteTransaction(conn *net.UDPConn, remote *net.UDPAddr, msg, callID string) (string, error) {
+	ch := e.registerWaiter(callID)
+	defer e.unregisterWaiter(callID)
 	if _, err := conn.WriteToUDP([]byte(msg), remote); err != nil {
-		return "", fmt.Errorf("INVITE gönderilemedi: %w", err)
+		return "", fmt.Errorf("INVITE gonderilemedi: %w", err)
 	}
 	const ringTimeout = 30 * time.Second
 	deadline := time.Now().Add(ringTimeout)
 	for {
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
-			return "", fmt.Errorf("çağrı zaman aşımına uğradı (yanıt yok)")
+			return "", fmt.Errorf("cagri zaman asimina ugradi (yanit yok)")
 		}
 		select {
-		case resp := <-e.respCh:
+		case resp := <-ch:
 			code, _ := statusCode(resp)
 			if code >= 200 {
 				return resp, nil
 			}
-			// 1xx (Trying/Ringing) — beklemeye devam, süreyi yenile
 			deadline = time.Now().Add(ringTimeout)
 		case <-time.After(remaining):
-			return "", fmt.Errorf("çağrı zaman aşımına uğradı (yanıt yok)")
+			return "", fmt.Errorf("cagri zaman asimina ugradi (yanit yok)")
 		}
 	}
 }

@@ -184,25 +184,33 @@
       <div class="card">
         <h3>Yeni Panel Tanımla</h3>
         <div class="form-grid">
-          <div class="field"><label>Panel Kodu (örn. 1013)</label><input id="np-code" type="text"></div>
+          <div class="field"><label>Panel/Cihaz Kodu (örn. 1013)</label><input id="np-code" type="text"></div>
           <div class="field"><label>Görünen Ad</label><input id="np-name" type="text"></div>
           <div class="field"><label>Konum</label><input id="np-loc" type="text"></div>
+          <div class="field">
+            <label>Cihaz Tipi</label>
+            <select id="np-devtype">
+              <option value="PANEL">PANEL (Muhabere Paneli)</option>
+              <option value="INTERKOM">INTERKOM</option>
+              <option value="IP_HORN">IP HORN</option>
+            </select>
+          </div>
         </div>
-        <div class="hint">Bölüm 10.22: Numara artık PANELE aittir (örn. komutan paneli 1001, astsubay paneli 1005). Panel oluşturulunca SIP hesabı + doğrudan-arama + sesli mesaj kutusu otomatik hazırlanır. O panele kim login olursa 1005 arandığında onun önüne düşer. "Kim login olabilir" → Yetkiler sekmesi.</div>
+        <div class="hint">SIP kimliği KULLANICIYA aittir — PANEL tipi kayıtlar SIP register OLMAZ, sadece bir yetki/tanım etiketidir ve sesli mesaj kutusu alır. INTERKOM/IP HORN ise gerçek donanım olduğundan kendi SIP hesabıyla register olur (Anons Sistemi FKT madde 2).</div>
         <div class="form-actions">
-          <button class="primary" onclick="createPanel()">Panel Oluştur</button>
+          <button class="primary" onclick="createPanel()">Oluştur</button>
           <span class="msg" id="np-msg"></span>
         </div>
       </div>
       <div class="card">
-        <h3>Panel Listesi</h3>
-        <div class="hint">10.22 öncesinden panelin varsa (SIP hesabı/arama tanımı yoktu), bir kez "Asterisk'e Senkronla" ile hepsini hazır hale getir. Tekrar basmak zarar vermez.</div>
+        <h3>Panel / Cihaz Listesi</h3>
+        <div class="hint">Bu buton PANEL tipi kayıtların sesli mesaj kutularını, INTERKOM/IP HORN tipi kayıtların ise eksikse SIP hesabını hazırlar/onarır. Tekrar basmak zarar vermez.</div>
         <div class="form-actions" style="margin-bottom:14px">
-          <button onclick="syncPanels()">Panelleri Asterisk'e Senkronla</button>
+          <button onclick="syncPanels()">Asterisk'e Senkronla</button>
           <span class="msg" id="sync-msg"></span>
         </div>
         <table>
-          <thead><tr><th>ID</th><th>Panel Kodu</th><th>Görünen Ad</th><th>Konum</th><th>Durum</th></tr></thead>
+          <thead><tr><th>ID</th><th>Kod</th><th>Görünen Ad</th><th>Konum</th><th>Tip</th><th>Durum</th></tr></thead>
           <tbody id="panels-tbody"></tbody>
         </table>
       </div>
@@ -311,15 +319,15 @@
     <div id="tab-ringgroups" style="display:none">
       <div class="card">
         <h3>Yeni Çatal Arama Tanımla</h3>
-        <div class="hint">Aranınca listedeki tüm KULLANICILAR aynı anda çalar (Bölüm 10.19) — hangi panelde login'seler orada çalar, ilk açan alır. Üye kullanıcıların önce SIP hesabı tanımlı olmalı (Kullanıcılar sekmesi).</div>
+        <div class="hint">Aranınca listedeki tüm üyeler aynı anda çalar — üye bir KULLANICI olabilir (hangi panelde login'se orada çalar) ya da bir INTERKOM/IP HORN/PANEL cihazı olabilir (Anons Sistemi FKT madde 3: üyelik cihaz tipinden bağımsız). Üye kullanıcıların önce SIP hesabı tanımlı olmalı (Kullanıcılar sekmesi); cihazların SIP hesabı otomatik (Paneller sekmesinde oluşturulur).</div>
         <div class="form-grid">
           <div class="field"><label>Grup Kodu (örn. 900)</label><input id="nrg-code" type="text"></div>
           <div class="field"><label>Görünen Ad</label><input id="nrg-name" type="text"></div>
           <div class="field"><label>Zaman Aşımı (sn)</label><input id="nrg-timeout" type="number" value="30"></div>
         </div>
         <div class="field">
-          <label>Üye Kullanıcılar (kullanıcı adı, virgülle ayrılmış — örn. komutan,astsubay)</label>
-          <input id="nrg-panels" type="text" placeholder="komutan,astsubay">
+          <label>Üyeler — "TİP:kod" biçiminde, virgülle ayrılmış (TİP: USER, PANEL, INTERKOM ya da IP_HORN)</label>
+          <input id="nrg-members" type="text" placeholder="USER:komutan,USER:astsubay,IP_HORN:horn1">
         </div>
         <div class="form-actions">
           <button class="primary" onclick="createRingGroup()">Çatal Arama Oluştur</button>
@@ -352,6 +360,11 @@
               <option value="USER">USER</option>
               <option value="RING_GROUP">RING_GROUP</option>
               <option value="TRUNK_REMOTE">TRUNK_REMOTE</option>
+              <option value="NUMBER">NUMBER</option>
+              <option value="PANEL">PANEL</option>
+              <option value="INTERKOM">INTERKOM</option>
+              <option value="IP_HORN">IP HORN</option>
+              <option value="CONFERENCE">KONFERANS</option>
             </select>
           </div>
           <div class="field"><label>Hedef Değer (kullanıcı adı / grup kodu / numara)</label><input id="nsd-target-value" type="text"></div>
@@ -522,15 +535,16 @@ function loadPanels() {
     const tbody = document.getElementById('panels-tbody');
     tbody.innerHTML = list.map(p => (
       '<tr><td>' + p.id + '</td><td>' + esc(p.panel_code) + '</td><td>' + esc(p.display_name) +
-      '</td><td>' + esc(p.location) + '</td><td>' + badge(p.enabled ? 'aktif' : 'kapalı', p.enabled ? 'on' : 'off') + '</td></tr>'
-    )).join('') || '<tr><td colspan="5" style="color:var(--muted)">Henüz panel yok.</td></tr>';
+      '</td><td>' + esc(p.location) + '</td><td>' + esc(p.device_type || 'PANEL') +
+      '</td><td>' + badge(p.enabled ? 'aktif' : 'kapalı', p.enabled ? 'on' : 'off') + '</td></tr>'
+    )).join('') || '<tr><td colspan="6" style="color:var(--muted)">Henüz panel/cihaz yok.</td></tr>';
 
     const opts = list.map(p => '<option value="' + esc(p.panel_code) + '">' + esc(p.panel_code) + ' - ' + esc(p.display_name) + '</option>').join('');
     const sel = document.getElementById('perm-panel');
     if (sel) sel.innerHTML = opts;
     loadCurrentPermission(); // seçim listesi ilk dolduğunda da gerçek yetkiyi göster
   }).catch(e => {
-    document.getElementById('panels-tbody').innerHTML = '<tr><td colspan="5" style="color:var(--danger)">Yüklenemedi: ' + esc(e.message) + '</td></tr>';
+    document.getElementById('panels-tbody').innerHTML = '<tr><td colspan="6" style="color:var(--danger)">Yüklenemedi: ' + esc(e.message) + '</td></tr>';
   });
 }
 
@@ -540,7 +554,8 @@ function loadRingGroups() {
     const tbody = document.getElementById('ringgroups-tbody');
     tbody.innerHTML = list.map(g => (
       '<tr><td>' + g.id + '</td><td>' + esc(g.group_code) + '</td><td>' + esc(g.display_name) +
-      '</td><td>' + esc(g.strategy) + '</td><td>' + g.timeout_sec + '</td><td>' + esc((g.members || []).join(', ')) + '</td></tr>'
+      '</td><td>' + esc(g.strategy) + '</td><td>' + g.timeout_sec + '</td><td>' +
+      esc((g.members || []).map(m => m.type + ':' + m.code).join(', ')) + '</td></tr>'
     )).join('') || '<tr><td colspan="6" style="color:var(--muted)">Henüz çatal arama tanımı yok.</td></tr>';
   }).catch(e => {
     document.getElementById('ringgroups-tbody').innerHTML = '<tr><td colspan="6" style="color:var(--danger)">Yüklenemedi: ' + esc(e.message) + '</td></tr>';
@@ -617,18 +632,24 @@ function createRingGroup() {
   const group_code = document.getElementById('nrg-code').value.trim();
   const display_name = document.getElementById('nrg-name').value.trim();
   const timeout_sec = parseInt(document.getElementById('nrg-timeout').value, 10) || 30;
-  const usernames = document.getElementById('nrg-panels').value.split(',').map(s => s.trim()).filter(Boolean);
+  const raw = document.getElementById('nrg-members').value.split(',').map(s => s.trim()).filter(Boolean);
   const msg = document.getElementById('nrg-msg');
   msg.className = 'msg'; msg.textContent = '';
-  if (!group_code || usernames.length < 2) { msg.className = 'msg err'; msg.textContent = 'Grup kodu ve en az 2 kullanıcı adı gerekli.'; return; }
+  const members = [];
+  for (const tok of raw) {
+    const idx = tok.indexOf(':');
+    if (idx < 0) { msg.className = 'msg err'; msg.textContent = 'Geçersiz üye biçimi: "' + tok + '" (TİP:kod olmalı, örn. USER:komutan)'; return; }
+    members.push({ type: tok.slice(0, idx).trim().toUpperCase(), code: tok.slice(idx + 1).trim() });
+  }
+  if (!group_code || members.length < 2) { msg.className = 'msg err'; msg.textContent = 'Grup kodu ve en az 2 üye gerekli.'; return; }
   api('/api/ring-groups', {
     method: 'POST',
-    body: JSON.stringify({ group_code, display_name, timeout_sec, usernames })
+    body: JSON.stringify({ group_code, display_name, timeout_sec, members })
   }).then(() => {
     msg.className = 'msg ok'; msg.textContent = 'Çatal arama oluşturuldu.';
     document.getElementById('nrg-code').value = '';
     document.getElementById('nrg-name').value = '';
-    document.getElementById('nrg-panels').value = '';
+    document.getElementById('nrg-members').value = '';
     loadRingGroups();
   }).catch(e => {
     msg.className = 'msg err'; msg.textContent = 'Hata: ' + e.message;
@@ -735,15 +756,16 @@ function createPanel() {
   const code = document.getElementById('np-code').value.trim();
   const name = document.getElementById('np-name').value.trim();
   const loc = document.getElementById('np-loc').value.trim();
+  const device_type = document.getElementById('np-devtype').value;
   const msg = document.getElementById('np-msg');
   msg.className = 'msg'; msg.textContent = '';
-  if (!code) { msg.className = 'msg err'; msg.textContent = 'Panel kodu zorunlu.'; return; }
+  if (!code) { msg.className = 'msg err'; msg.textContent = 'Kod zorunlu.'; return; }
   api('/api/panels', {
     method: 'POST',
-    body: JSON.stringify({ panel_code: code, display_name: name, location: loc })
+    body: JSON.stringify({ panel_code: code, display_name: name, location: loc, device_type })
   }).then((resp) => {
     msg.className = 'msg ok';
-    msg.textContent = (resp && resp.warning) ? ('Panel oluşturuldu (uyarı: ' + resp.warning + ')') : 'Panel oluşturuldu.';
+    msg.textContent = (resp && resp.warning) ? ('Oluşturuldu (uyarı: ' + resp.warning + ')') : 'Oluşturuldu.';
     document.getElementById('np-code').value = '';
     document.getElementById('np-name').value = '';
     document.getElementById('np-loc').value = '';
