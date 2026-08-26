@@ -10,28 +10,55 @@ import (
 	"rnvcs-yonetim-servisi/internal/pg"
 )
 
+// ringGroupMember — bir çatal arama grubunun tek üyesi. Type: USER
+// (users.sip_username üzerinden) ya da PANEL/INTERKOM/IP_HORN
+// (panels.panel_code üzerinden — Anons Sistemi FKT madde 3: ring group
+// üyeliği cihaz tipinden bağımsız olmalı).
+type ringGroupMember struct {
+	Type string `json:"type"` // USER | PANEL | INTERKOM | IP_HORN
+	Code string `json:"code"` // USER için username, diğerleri için panel_code
+}
+
 type createRingGroupRequest struct {
-	GroupCode   string   `json:"group_code"`
-	DisplayName string   `json:"display_name"`
-	Strategy    string   `json:"strategy"`
-	TimeoutSec  int      `json:"timeout_sec"`
-	Usernames   []string `json:"usernames"` // Bölüm 10.19: çatal arama artık KULLANICILARI çaldırır, paneli değil
+	GroupCode   string            `json:"group_code"`
+	DisplayName string            `json:"display_name"`
+	Strategy    string            `json:"strategy"`
+	TimeoutSec  int               `json:"timeout_sec"`
+	Members     []ringGroupMember `json:"members"`
+}
+
+type ringGroupMemberOut struct {
+	Type        string `json:"type"`
+	Code        string `json:"code"`
+	DisplayName string `json:"display_name"`
 }
 
 type ringGroupItem struct {
-	ID          int      `json:"id"`
-	GroupCode   string   `json:"group_code"`
-	DisplayName string   `json:"display_name"`
-	Strategy    string   `json:"strategy"`
-	TimeoutSec  int      `json:"timeout_sec"`
-	Members     []string `json:"members"` // üye kullanıcı adları
+	ID          int                  `json:"id"`
+	GroupCode   string               `json:"group_code"`
+	DisplayName string               `json:"display_name"`
+	Strategy    string               `json:"strategy"`
+	TimeoutSec  int                  `json:"timeout_sec"`
+	Members     []ringGroupMemberOut `json:"members"`
 }
 
-// RingGroups — GET: çatal arama (ring group) listesi, üye kullanıcılarla
-// birlikte. POST: yeni ring group tanımlama — ADMIN veya MAINTAINER
-// (Bölüm 10.5). Bölüm 10.19 kararı: üyeler artık kullanıcı — Asterisk
-// zaten o kullanıcı hangi panelden register olduysa oraya çevirir, bu
-// yüzden dialplan üyelerin SIP hesabı (users.sip_username) ile yazılır.
+func validMemberType(t string) bool {
+	switch t {
+	case "USER", "PANEL", "INTERKOM", "IP_HORN":
+		return true
+	}
+	return false
+}
+
+// RingGroups — GET: çatal arama (ring group) listesi, üyelerle birlikte
+// (kullanıcı VEYA panel/interkom/ip horn olabilir). POST: yeni ring group
+// tanımlama — ADMIN veya MAINTAINER (Bölüm 10.5).
+//
+// Anons Sistemi FKT madde 3: üyelik artık cihaz tipinden bağımsız — bir
+// gruba kullanıcıların yanı sıra Interkom/IP Horn da eklenebilir. Asterisk
+// tarafında hiçbir şey değişmiyor (dialplan.AppendRingGroup zaten sadece
+// "PJSIP/<kod>" string'i üretiyordu, kaynağı users ya da panels olması
+// fark etmez).
 func (h *Handler) RingGroups(w http.ResponseWriter, r *http.Request) {
 	sess, ok := h.authenticate(r)
 	if !ok {
@@ -53,15 +80,25 @@ func (h *Handler) RingGroups(w http.ResponseWriter, r *http.Request) {
 			}
 			id, _ := strconv.Atoi(rr[0])
 			timeout, _ := strconv.Atoi(rr[4])
-			memberRows, _ := h.db.Query(
-				"SELECT u.username FROM ring_group_members m JOIN users u ON u.id=m.user_id " +
+
+			var members []ringGroupMemberOut
+			userRows, _ := h.db.Query(
+				"SELECT u.username, COALESCE(u.full_name,'') FROM ring_group_members m JOIN users u ON u.id=m.user_id " +
 					"WHERE m.group_id=" + rr[0] + " ORDER BY m.priority")
-			var members []string
-			for _, mr := range memberRows {
-				if len(mr) > 0 {
-					members = append(members, mr[0])
+			for _, mr := range userRows {
+				if len(mr) >= 2 {
+					members = append(members, ringGroupMemberOut{Type: "USER", Code: mr[0], DisplayName: mr[1]})
 				}
 			}
+			panelRows, _ := h.db.Query(
+				"SELECT p.panel_code, p.display_name, p.device_type FROM ring_group_members m JOIN panels p ON p.id=m.panel_id " +
+					"WHERE m.group_id=" + rr[0] + " ORDER BY m.priority")
+			for _, mr := range panelRows {
+				if len(mr) >= 3 {
+					members = append(members, ringGroupMemberOut{Type: mr[2], Code: mr[0], DisplayName: mr[1]})
+				}
+			}
+
 			list = append(list, ringGroupItem{
 				ID: id, GroupCode: rr[1], DisplayName: rr[2], Strategy: rr[3], TimeoutSec: timeout, Members: members,
 			})
@@ -78,9 +115,15 @@ func (h *Handler) RingGroups(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "geçersiz istek gövdesi")
 			return
 		}
-		if req.GroupCode == "" || len(req.Usernames) < 2 {
-			writeErr(w, http.StatusBadRequest, "group_code ve en az 2 kullanıcı adı gerekli (çatal arama tanımı gereği)")
+		if req.GroupCode == "" || len(req.Members) < 2 {
+			writeErr(w, http.StatusBadRequest, "group_code ve en az 2 üye gerekli (çatal arama tanımı gereği)")
 			return
+		}
+		for _, m := range req.Members {
+			if !validMemberType(m.Type) || m.Code == "" {
+				writeErr(w, http.StatusBadRequest, "her üyenin type'ı USER|PANEL|INTERKOM|IP_HORN ve code'u dolu olmalı")
+				return
+			}
 		}
 		if req.Strategy == "" {
 			req.Strategy = "ringall"
@@ -102,26 +145,54 @@ func (h *Handler) RingGroups(w http.ResponseWriter, r *http.Request) {
 		var missing []string
 		var noSip []string
 		var sipUsernames []string
-		for i, uname := range req.Usernames {
-			userRow, err := h.db.QueryRow("SELECT id, COALESCE(sip_username,'') FROM users WHERE username=" + pg.EscapeLiteral(uname))
+		for i, m := range req.Members {
+			var idVal, sipTarget string
+			var err error
+			if m.Type == "USER" {
+				// Dial hedefi kullanıcının sip_username'i (login adı DEĞİL —
+				// bir kullanıcı istediği sip_username ile register olabilir).
+				userRow, e := h.db.QueryRow("SELECT id, COALESCE(sip_username,'') FROM users WHERE username=" + pg.EscapeLiteral(m.Code))
+				err = e
+				if e == nil {
+					idVal, sipTarget = userRow[0], userRow[1]
+				}
+			} else {
+				// Panel/Interkom/IP Horn'da panel_code = SIP username (bkz.
+				// internal/pjsip/writer.go); presence kontrolü sip_password
+				// dolu mu diye bakar (boşsa hiç register olamaz).
+				panelRow, e := h.db.QueryRow("SELECT id, COALESCE(sip_password,'') FROM panels WHERE panel_code=" +
+					pg.EscapeLiteral(m.Code) + " AND device_type=" + pg.EscapeLiteral(m.Type))
+				err = e
+				if e == nil {
+					idVal = panelRow[0]
+					if panelRow[1] != "" {
+						sipTarget = m.Code
+					}
+				}
+			}
 			if err != nil {
-				missing = append(missing, uname)
+				missing = append(missing, m.Type+":"+m.Code)
 				continue
 			}
-			if userRow[1] == "" {
-				noSip = append(noSip, uname)
+			if sipTarget == "" {
+				noSip = append(noSip, m.Type+":"+m.Code)
 				continue
 			}
-			_ = h.db.Exec("INSERT INTO ring_group_members (group_id, user_id, priority) VALUES (" +
-				groupID + "," + userRow[0] + "," + strconv.Itoa(i) + ")")
-			sipUsernames = append(sipUsernames, userRow[1])
+			if m.Type == "USER" {
+				_ = h.db.Exec("INSERT INTO ring_group_members (group_id, user_id, priority) VALUES (" +
+					groupID + "," + idVal + "," + strconv.Itoa(i) + ")")
+			} else {
+				_ = h.db.Exec("INSERT INTO ring_group_members (group_id, panel_id, priority) VALUES (" +
+					groupID + "," + idVal + "," + strconv.Itoa(i) + ")")
+			}
+			sipUsernames = append(sipUsernames, sipTarget)
 		}
 		if len(missing) > 0 {
-			writeErr(w, http.StatusConflict, "ring group oluşturuldu ama şu kullanıcılar bulunamadı: "+strings.Join(missing, ", "))
+			writeErr(w, http.StatusConflict, "ring group oluşturuldu ama şu üyeler bulunamadı: "+strings.Join(missing, ", "))
 			return
 		}
 		if len(noSip) > 0 {
-			writeErr(w, http.StatusConflict, "ring group oluşturuldu ama şu kullanıcıların SIP hesabı tanımlı değil (Bakım Terminali > Kullanıcılar'dan atanmalı): "+strings.Join(noSip, ", "))
+			writeErr(w, http.StatusConflict, "ring group oluşturuldu ama şu üyelerin SIP hesabı tanımlı değil: "+strings.Join(noSip, ", "))
 			return
 		}
 

@@ -53,9 +53,10 @@ type RegStatus struct {
 type Engine struct {
 	mu sync.Mutex
 
-	conn    *net.UDPConn // kalıcı SIP sinyalleşme soketi
-	localIP string
-	respCh  chan string
+	conn        *net.UDPConn // kalıcı SIP sinyalleşme soketi
+	localIP     string
+	respCh      chan string
+	respWaiters map[string]chan string
 
 	cfg           Config
 	registered    bool
@@ -152,6 +153,7 @@ func (e *Engine) Start(cfg Config) error {
 	e.localIP = localIP
 	e.cfg = cfg
 	e.respCh = make(chan string, 4)
+	e.respWaiters = make(map[string]chan string)
 	e.mu.Unlock()
 
 	go e.readLoop(conn)
@@ -200,7 +202,12 @@ func (e *Engine) refreshLoop(cfg Config, stopCh chan struct{}) {
 			}
 			e.mu.Unlock()
 			if err != nil {
-				return
+				log.Printf("!! REGISTER yenileme basarisiz (bir sonraki turda tekrar denenecek): %v", err)
+				// DUZELTME (2026-08-25): oncesinde burada "return" ile dongu
+				// KALICI olarak duruyordu - respWaiters duzeltmesinden onceki
+				// tek seferlik bir catisma bile kaydi sonsuza kadar dusuruyordu.
+				// Artik hata olsa da bir sonraki ticker turunda tekrar
+				// denenmeye devam ediliyor.
 			}
 		}
 	}
@@ -281,7 +288,7 @@ func (e *Engine) registerOn(conn *net.UDPConn, cfg Config, expiresSec int) error
 	cseq := 1
 
 	msg1 := buildRegisterReq(cfg, contact, localHostPort, callID, fromTag, cseq, expiresSec, "")
-	resp1, err := e.sendAndAwait(conn, remoteAddr, msg1)
+	resp1, err := e.sendAndAwait(conn, remoteAddr, msg1, callID)
 	if err != nil {
 		return err
 	}
@@ -321,7 +328,7 @@ func (e *Engine) registerOn(conn *net.UDPConn, cfg Config, expiresSec int) error
 
 	cseq++
 	msg2 := buildRegisterReq(cfg, contact, localHostPort, callID, fromTag, cseq, expiresSec, authHeader)
-	resp2, err := e.sendAndAwait(conn, remoteAddr, msg2)
+	resp2, err := e.sendAndAwait(conn, remoteAddr, msg2, callID)
 	if err != nil {
 		return err
 	}
@@ -332,15 +339,17 @@ func (e *Engine) registerOn(conn *net.UDPConn, cfg Config, expiresSec int) error
 	return nil
 }
 
-func (e *Engine) sendAndAwait(conn *net.UDPConn, remote *net.UDPAddr, msg string) (string, error) {
+func (e *Engine) sendAndAwait(conn *net.UDPConn, remote *net.UDPAddr, msg, callID string) (string, error) {
+	ch := e.registerWaiter(callID)
+	defer e.unregisterWaiter(callID)
 	if _, err := conn.WriteToUDP([]byte(msg), remote); err != nil {
-		return "", fmt.Errorf("istek gönderilemedi: %w", err)
+		return "", fmt.Errorf("istek gonderilemedi: %w", err)
 	}
 	select {
-	case resp := <-e.respCh:
+	case resp := <-ch:
 		return resp, nil
 	case <-time.After(5 * time.Second):
-		return "", fmt.Errorf("yanıt zaman aşımı (Asterisk erişilebilir mi, SIP/UDP portu açık mı?)")
+		return "", fmt.Errorf("yanit zaman asimi (Asterisk erisilebilir mi, SIP/UDP portu acik mi?)")
 	}
 }
 
@@ -401,20 +410,56 @@ func (e *Engine) readLoop(conn *net.UDPConn) {
 	for {
 		n, from, err := conn.ReadFromUDP(buf)
 		if err != nil {
-			return // soket kapatıldı
+			return // soket kapatildi
 		}
 		msg := string(buf[:n])
 		if strings.HasPrefix(msg, "SIP/2.0") {
-			select {
-			case e.respCh <- msg:
-			default:
-				// register() şu an bir yanıt beklemiyor olabilir (örn. gecikmiş
-				// retransmit) — sessizce yut.
+			// DUZELTME (2026-08-25): cevaplar artik paylasilan TEK bir kanala
+			// degil, Call-ID'sine gore dogru bekleyen istege yonlendiriliyor.
+			// Oncesinde REGISTER yenilemesi ile giden bir INVITE ayni kanaldan
+			// okudugu icin birbirlerinin (or. eski nonce iceren) cevabini
+			// calabiliyordu.
+			cid := extractCallID(msg)
+			e.mu.Lock()
+			ch := e.respWaiters[cid]
+			e.mu.Unlock()
+			if ch != nil {
+				select {
+				case ch <- msg:
+				default:
+				}
 			}
 			continue
 		}
 		e.handleRequest(msg, from)
 	}
+}
+
+var callIDRe = regexp.MustCompile(`(?im)^Call-ID:\s*(.+?)\s*$`)
+
+func extractCallID(msg string) string {
+	m := callIDRe.FindStringSubmatch(msg)
+	if m == nil {
+		return ""
+	}
+	return strings.TrimSpace(m[1])
+}
+
+func (e *Engine) registerWaiter(callID string) chan string {
+	ch := make(chan string, 4)
+	e.mu.Lock()
+	if e.respWaiters == nil {
+		e.respWaiters = make(map[string]chan string)
+	}
+	e.respWaiters[callID] = ch
+	e.mu.Unlock()
+	return ch
+}
+
+func (e *Engine) unregisterWaiter(callID string) {
+	e.mu.Lock()
+	delete(e.respWaiters, callID)
+	e.mu.Unlock()
 }
 
 func (e *Engine) handleRequest(msg string, from *net.UDPAddr) {

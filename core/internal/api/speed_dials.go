@@ -34,7 +34,7 @@ type speedDialItem struct {
 
 func validSpeedTarget(t string) bool {
 	switch t {
-	case "USER", "RING_GROUP", "TRUNK_REMOTE", "NUMBER", "PANEL":
+	case "USER", "RING_GROUP", "TRUNK_REMOTE", "NUMBER", "PANEL", "INTERKOM", "IP_HORN", "CONFERENCE":
 		return true
 	}
 	return false
@@ -104,7 +104,7 @@ func (h *Handler) SpeedDials(w http.ResponseWriter, r *http.Request) {
 			req.TargetType = "NUMBER"
 		}
 		if !validSpeedTarget(req.TargetType) {
-			writeErr(w, http.StatusBadRequest, "target_type USER|RING_GROUP|TRUNK_REMOTE|NUMBER|PANEL olmalı")
+			writeErr(w, http.StatusBadRequest, "target_type USER|RING_GROUP|TRUNK_REMOTE|NUMBER|PANEL|INTERKOM|IP_HORN|CONFERENCE olmalı")
 			return
 		}
 		userRow, err := h.db.QueryRow("SELECT id FROM users WHERE username=" + pg.EscapeLiteral(req.Username))

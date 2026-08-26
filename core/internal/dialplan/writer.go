@@ -119,6 +119,40 @@ exten => %s,1,NoOp(RNVCS panel %s araniyor)
 	return Reload()
 }
 
+// AppendDeviceExtension, Interkom/IP Horn gibi bir "cihaz"ı (panels
+// tablosunda device_type='INTERKOM'|'IP_HORN' olan satır) doğrudan
+// aranabilir yapar. AppendPanelExtension'dan farkı: voicemail fallback'i
+// YOK — sade Dial()+Hangup() (Anons Sistemi FKT madde 2: "Interkom
+// extension'ı panel gibi voicemail fallback'ine düşmemeli"). Otomatik
+// cevaplama davranışı Asterisk tarafında değil, cihazın kendi SIP
+// client'ında/firmware'inde ayarlanmalı.
+//
+// NOT (MVP): AppendPanelExtension/AppendDirectExtension gibi idempotent
+// DEĞİL — aynı deviceCode için tekrar çağrılırsa dosyada yinelenen blok
+// oluşur.
+func AppendDeviceExtension(deviceCode string, timeoutSec int) error {
+	if timeoutSec <= 0 {
+		timeoutSec = 30
+	}
+	f, err := os.OpenFile(configPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0640)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	block := fmt.Sprintf(`
+[rnvcs-panels]
+exten => %s,1,NoOp(RNVCS cihaz %s araniyor)
+ same => n,Dial(PJSIP/%s,%d)
+ same => n,Hangup()
+`, deviceCode, deviceCode, deviceCode, timeoutSec)
+
+	if _, err := f.WriteString(block); err != nil {
+		return err
+	}
+	return Reload()
+}
+
 // Reload, Asterisk'e dialplan'i yeniden yüklemesini söyler.
 func Reload() error {
 	cmd := exec.Command("asterisk", "-rx", "dialplan reload")

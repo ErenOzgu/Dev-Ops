@@ -139,8 +139,11 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 		// — Bakım Terminali'ndeki checkbox varsayılanlarıyla aynı) otomatik
 		// ekleniyor. Yönetici isterse Yetkiler sekmesinden bunu daraltabilir/
 		// genişletebilir; bu sadece güvenli bir varsayılan.
+		// GÜNCELLEME (Anons Sistemi FKT madde 2): sadece device_type='PANEL'
+		// olan kayıtlar için varsayılan yetki verilir — "login yetkisi"
+		// Interkom/IP Horn gibi gerçek donanım için bir kavram değil.
 		if err := h.db.Exec("INSERT INTO user_panel_permissions (user_id, panel_id, can_login, can_call, can_anons, can_config) " +
-			"SELECT " + strconv.Itoa(newID) + ", id, true, true, false, false FROM panels WHERE enabled = true " +
+			"SELECT " + strconv.Itoa(newID) + ", id, true, true, false, false FROM panels WHERE enabled = true AND device_type = 'PANEL' " +
 			"ON CONFLICT (user_id, panel_id) DO NOTHING"); err != nil {
 			// Bu sadece bir kolaylık (varsayılan yetki) olduğundan kullanıcı
 			// oluşturmayı BAŞARISIZ saymıyoruz — ama yönetici Yetkiler
@@ -246,12 +249,13 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "kendi hesabını silemezsin — başka bir ADMIN ile sil")
 			return
 		}
-		row, err := h.db.QueryRow("SELECT username FROM users WHERE id=" + strconv.Itoa(targetID))
+		row, err := h.db.QueryRow("SELECT username, COALESCE(sip_username,'') FROM users WHERE id=" + strconv.Itoa(targetID))
 		if err != nil {
 			writeErr(w, http.StatusNotFound, "kullanıcı bulunamadı")
 			return
 		}
 		targetUsername := row[0]
+		targetSipUsername := row[1]
 
 		// event_log.user_id'de ON DELETE CASCADE YOK (bilinçli — audit kaydı
 		// kullanıcı silinse de kalıcı olmalı), bu yüzden önce FK'yi NULL'a
@@ -270,17 +274,19 @@ func (h *Handler) Users(w http.ResponseWriter, r *http.Request) {
 
 		_ = h.db.Exec("INSERT INTO event_log (event_type, user_id, detail) VALUES ('CONFIG_CHANGE', " +
 			strconv.Itoa(sess.UserID) + ", " + pg.EscapeLiteral(`{"action":"delete_user","target_username":"`+targetUsername+`"}`) + ")")
-		// BİLİNEN SINIRLAMA: bu kullanıcının bir SIP hesabı vardıysa,
-		// pjsip_rnvcs_dynamic.conf / extensions_rnvcs_dynamic.conf içindeki
-		// PJSIP endpoint + doğrudan-arama extension blokları BURADA
-		// silinmiyor (AppendEndpoint/AppendDirectExtension append-only,
-		// idempotent bir "kaldır" karşılığı henüz yok — bkz. 10.14/10.16/10.20
-		// MVP sınırlamaları). Kalan blok zararsızdır (kimse register olmadığı
-		// sürece kullanılmaz) ama aynı sip_username'i başka bir kullanıcıya
-		// tekrar atarsan dosyada eski + yeni blok yan yana kalır, Asterisk
-		// pratikte sonuncuyu kullanır. Üretimde idempotent bir writer'a
-		// (ya da Asterisk config'ini DB'den yeniden üreten bir "reconcile"
-		// adımına) geçilmeli.
+		// GÜNCELLEME: pjsip.AppendEndpoint artık idempotent bir işaretle
+		// yazıyor, bu sayede RemoveEndpoint aynı işareti kullanarak PJSIP
+		// bloğunu (ve dolaylı olarak eski extensions_rnvcs_dynamic.conf
+		// bloğunu DEĞİL — o hâlâ ayrı bir MVP sınırlaması, dialplan writer'da
+		// henüz kaldırma yok) temiz biçimde siler. Kullanıcının SIP hesabı
+		// yoksa (targetSipUsername boş) hiçbir şey yapılmaz.
+		if targetSipUsername != "" {
+			if err := pjsip.RemoveEndpoint(targetSipUsername); err != nil {
+				// Kullanıcı zaten silindi, bunu FATAL saymıyoruz — ama logluyoruz.
+				_ = h.db.Exec("INSERT INTO event_log (event_type, user_id, detail) VALUES ('CONFIG_CHANGE', " +
+					strconv.Itoa(sess.UserID) + ", " + pg.EscapeLiteral(`{"action":"delete_user_sip_cleanup_failed","target_username":"`+targetUsername+`","error":"`+err.Error()+`"}`) + ")")
+			}
+		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 
 	default:

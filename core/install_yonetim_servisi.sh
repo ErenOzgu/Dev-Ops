@@ -45,17 +45,66 @@ if [[ ! -f "$ENV_FILE" ]]; then
     DB_PASS="CHANGE_ME"
   fi
   PROV_KEY="$(openssl rand -hex 24)"
+  AMI_SECRET="$(openssl rand -hex 16)"
   # NOT: DSN, psql'in de kabul ettiği libpq URI formatında (postgresql://...)
   # yazılıyor — internal/pg paketi sorguları `psql` CLI ile çalıştırıyor.
   cat > "$ENV_FILE" <<EOF
 RNVCS_DB_DSN=postgresql://rnvcs:$DB_PASS@localhost:5432/rnvcs?sslmode=disable
 RNVCS_PROVISIONING_KEY=$PROV_KEY
+RNVCS_AMI_ADDR=127.0.0.1:5038
+RNVCS_AMI_USER=rnvcs
+RNVCS_AMI_SECRET=$AMI_SECRET
 EOF
   chmod 600 "$ENV_FILE"
   echo "    Provisioning anahtarı üretildi (panellere de verilecek): $ENV_FILE"
 else
   echo "    $ENV_FILE zaten var, dokunulmadı."
+  # Eski kurulumlarda AMI_* satırları hiç yoktu (Anons Sistemi FKT madde 4 —
+  # konferans — ile eklendi). Env dosyası varsa ama bu satırlar eksikse
+  # idempotent olarak tamamla (mevcut DB_DSN/PROVISIONING_KEY'e dokunmadan).
+  if ! grep -q '^RNVCS_AMI_USER=' "$ENV_FILE"; then
+    AMI_SECRET="$(openssl rand -hex 16)"
+    {
+      echo "RNVCS_AMI_ADDR=127.0.0.1:5038"
+      echo "RNVCS_AMI_USER=rnvcs"
+      echo "RNVCS_AMI_SECRET=$AMI_SECRET"
+    } >> "$ENV_FILE"
+    echo "    RNVCS_AMI_* satırları eksikti, eklendi (konferans özelliği için)."
+  fi
 fi
+
+echo "==> [4b/7] Asterisk AMI (manager.conf) yapılandırılıyor (sadece localhost, konferans için — Anons Sistemi FKT madde 4)..."
+AMI_USER_LINE="$(grep '^RNVCS_AMI_USER=' "$ENV_FILE" | cut -d= -f2-)"
+AMI_SECRET_LINE="$(grep '^RNVCS_AMI_SECRET=' "$ENV_FILE" | cut -d= -f2-)"
+if [[ -n "$AMI_USER_LINE" && -n "$AMI_SECRET_LINE" ]]; then
+  if ! grep -q "^\[$AMI_USER_LINE\]" /etc/asterisk/manager.conf 2>/dev/null; then
+    cat >> /etc/asterisk/manager.conf <<EOF
+
+[$AMI_USER_LINE]
+secret = $AMI_SECRET_LINE
+deny = 0.0.0.0/0.0.0.0
+permit = 127.0.0.1/255.255.255.255
+read = system,call,originate
+write = system,call,originate
+EOF
+    # [general] bölümünde enabled/bindaddr yoksa ekle (idempotent).
+    grep -q '^enabled *= *yes' /etc/asterisk/manager.conf || sed -i '0,/\[general\]/s//[general]\nenabled = yes/' /etc/asterisk/manager.conf
+    grep -q '^bindaddr' /etc/asterisk/manager.conf || sed -i '0,/\[general\]/s//[general]\nbindaddr = 127.0.0.1/' /etc/asterisk/manager.conf
+    asterisk -rx "manager reload" || true
+    echo "    manager.conf'a [$AMI_USER_LINE] eklendi (127.0.0.1'den erişim, dışarı KAPALI)."
+  else
+    echo "    manager.conf'ta [$AMI_USER_LINE] zaten var, dokunulmadı."
+  fi
+fi
+
+echo "==> [4c/7] voip_goster script'i kuruluyor (SSH ile CORE'a bağlanıp 'voip_goster' yazınca register olmuş cihazları listeler)..."
+cat > /usr/local/bin/voip_goster <<'VOIPEOF'
+#!/usr/bin/env bash
+asterisk -rx "pjsip show contacts"
+echo "---"
+asterisk -rx "pjsip show endpoints"
+VOIPEOF
+chmod +x /usr/local/bin/voip_goster
 
 echo "==> [5/7] pjsip.conf / extensions.conf / iax.conf içine dinamik config include'ları ekleniyor (idempotent)..."
 touch /etc/asterisk/pjsip_rnvcs_dynamic.conf
@@ -96,6 +145,25 @@ asterisk -rx "voicemail reload" || true
 RNVCS_SVC_USER="${RNVCS_SVC_USER:-root}"
 if [ "$RNVCS_SVC_USER" != "root" ]; then
   usermod -aG asterisk "$RNVCS_SVC_USER" 2>/dev/null || true
+fi
+
+echo "==> [4d/7] Asterisk confbridge.conf hazırlanıyor (konferans için varsayılan profil)..."
+if [[ ! -f /etc/asterisk/confbridge.conf ]] || ! grep -q '^\[rnvcs_bridge\]' /etc/asterisk/confbridge.conf 2>/dev/null; then
+  cat >> /etc/asterisk/confbridge.conf <<EOF
+
+[rnvcs_bridge]
+type=bridge
+
+[rnvcs_user]
+type=user
+admin=no
+marked=no
+EOF
+  asterisk -rx "module load res_confbridge.so" 2>/dev/null || asterisk -rx "module reload res_confbridge.so" || true
+  asterisk -rx "confbridge reload" || true
+  echo "    [rnvcs_bridge]/[rnvcs_user] profilleri eklendi."
+else
+  echo "    confbridge.conf'ta [rnvcs_bridge] zaten var, dokunulmadı."
 fi
 
 echo "==> [6/7] systemd servisi yazılıyor..."

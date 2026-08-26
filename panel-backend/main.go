@@ -246,7 +246,7 @@ func main() {
 		// panelde oturum açmış kişinin önüne düşer. Önceki model — Bölüm
 		// 10.19 kullanıcı-SIP kimliği — /api/my-sip-credentials üzerinden
 		// hâlâ mevcut ama panel akışında artık KULLANILMIYOR).
-		credReq, _ := http.NewRequest(http.MethodGet, req.YonetimServisiURL+"/api/my-panel-sip-credentials", nil)
+		credReq, _ := http.NewRequest(http.MethodGet, req.YonetimServisiURL+"/api/my-sip-credentials", nil)
 		credReq.Header.Set("Authorization", "Bearer "+req.Token)
 		credResp, err := http.DefaultClient.Do(credReq)
 		if err != nil {
@@ -257,12 +257,12 @@ func main() {
 		defer credResp.Body.Close()
 		body, _ := io.ReadAll(credResp.Body)
 		if credResp.StatusCode == http.StatusNotFound {
-			log.Printf("!! /api/session: panel SIP kimliği alınamadı (404 my-panel-sip-credentials): %s", string(body))
-			http.Error(w, "bu oturum bir panele bağlı değil ya da panelin SIP şifresi tanımsız (login'de panel_code gönderildi mi?)", http.StatusNotFound)
+			log.Printf("!! /api/session: kullanıcının SIP hesabı tanımsız (404 my-sip-credentials): %s", string(body))
+			http.Error(w, "kullanıcının SIP hesabı tanımlı değil (BKT > Kullanıcılar sekmesinden atanmalı)", http.StatusNotFound)
 			return
 		}
 		if credResp.StatusCode != http.StatusOK {
-			log.Printf("!! /api/session: my-panel-sip-credentials http %d: %s", credResp.StatusCode, string(body))
+			log.Printf("!! /api/session: my-sip-credentials http %d: %s", credResp.StatusCode, string(body))
 			http.Error(w, fmt.Sprintf("panel SIP kimlik bilgileri alınamadı (http %d): %s", credResp.StatusCode, string(body)), http.StatusBadGateway)
 			return
 		}
@@ -272,7 +272,7 @@ func main() {
 			http.Error(w, "panel SIP kimlik bilgileri çözümlenemedi", http.StatusBadGateway)
 			return
 		}
-		log.Printf(">> /api/session: panel SIP kimliği alındı: panel_no=%s (bu panelin numarası)", creds.SipUsername)
+		log.Printf(">> /api/session: kullanıcı SIP kimliği alındı: sip_username=%s", creds.SipUsername)
 
 		// 2) Bu kimlikle Asterisk'e gerçek bir SIP REGISTER gönder (aynı kalıcı
 		// soket, register sonrası gelen INVITE'ları da dinlemeye devam eder —
