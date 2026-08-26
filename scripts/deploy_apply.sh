@@ -60,6 +60,10 @@ echo "=== [4/6] Binary izinleri ayarlanıyor ==="
 chmod 755 "${RELEASE_DIR}/rnvcs-yonetim-servisi" 2>/dev/null || true
 chmod 755 "${RELEASE_DIR}/rnvcs-panel-backend" 2>/dev/null || true
 
+cp "${RELEASE_DIR}/rnvcs-yonetim-servisi" /opt/rnvcs/rnvcs-yonetim-servisi.new 2>/dev/null && mv /opt/rnvcs/rnvcs-yonetim-servisi.new /opt/rnvcs/rnvcs-yonetim-servisi || true
+cp "${RELEASE_DIR}/rnvcs-panel-backend" /opt/rnvcs/rnvcs-panel-backend.new 2>/dev/null && mv /opt/rnvcs/rnvcs-panel-backend.new /opt/rnvcs/rnvcs-panel-backend || true
+chmod 755 /opt/rnvcs/rnvcs-yonetim-servisi 2>/dev/null || true
+chmod 755 /opt/rnvcs/rnvcs-panel-backend 2>/dev/null || true
 echo "=== [5/6] 'current' sembolik linki yeni sürüme çevriliyor ==="
 ln -sfn "$RELEASE_DIR" "$CURRENT_LINK"
 
