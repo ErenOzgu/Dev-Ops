@@ -11,25 +11,56 @@ import (
 	"rnvcs-yonetim-servisi/internal/pg"
 )
 
+// conferenceMember — konferansa tek bir katılımcı. Type: USER (users.sip_username
+// üzerinden) ya da INTERKOM/IP_HORN (panels.sip_password/panel_code üzerinden).
+// Desen ring_groups.go'daki ringGroupMember ile birebir aynı (Konferansa
+// Interkom/IP Horn Ekleme — Tamamlayıcı Geliştirici Notu, 2026-08-26).
+//
+// NOT: Type="PANEL" burada KASITLI OLARAK desteklenmiyor — device_type='PANEL'
+// olan ham panel kaydı kendi başına SIP register olmuyor (SIP kimliği
+// kullanıcıya ait, bkz. internal/pjsip/writer.go). O panelde login olan
+// kullanıcı konferansa Type="USER" ile eklenmeli.
+type conferenceMember struct {
+	Type string `json:"type"` // USER | INTERKOM | IP_HORN
+	Code string `json:"code"` // USER için username, diğerleri için panel_code
+}
+
+func validConferenceMemberType(t string) bool {
+	switch t {
+	case "USER", "INTERKOM", "IP_HORN":
+		return true
+	}
+	return false
+}
+
 type createConferenceRequest struct {
-	RoomCode             string   `json:"room_code"` // boşsa otomatik üretilir
-	DisplayName          string   `json:"display_name"`
-	ParticipantUsernames []string `json:"participant_usernames"` // en az 2 KULLANICI adı (login username)
+	RoomCode    string `json:"room_code"` // boşsa otomatik üretilir
+	DisplayName string `json:"display_name"`
+
+	// Yeni model — en az 2 üye, USER/INTERKOM/IP_HORN karışık olabilir.
+	Participants []conferenceMember `json:"participants"`
+
+	// Geriye dönük uyumluluk: eski panel_app sürümleri hâlâ bunu gönderebilir.
+	// Participants doluysa bu alan YOK SAYILIR. Boş participants + dolu
+	// ParticipantUsernames görülürse otomatik olarak Type=USER üyelere çevrilir.
+	ParticipantUsernames []string `json:"participant_usernames"`
 }
 
 type conferenceResponse struct {
 	RoomCode string   `json:"room_code"`
-	Invited  []string `json:"invited"`          // başarıyla Originate edilen sip_username'ler
-	Failed   []string `json:"failed,omitempty"` // Originate başarısız olan katılımcılar (username:sebep)
+	Invited  []string `json:"invited"`          // başarıyla Originate edilen sip hedefleri
+	Failed   []string `json:"failed,omitempty"` // Originate başarısız olan katılımcılar (tip:kod: sebep)
 }
 
-// Conference — POST /api/conference: madde 4 (Anons Sistemi FKT) —
-// listeden çoklu katılımcı seçip aynı konferans odasına dahil etme.
+// Conference — POST /api/conference: madde 4 (Anons Sistemi FKT) — listeden
+// çoklu katılımcı seçip aynı konferans odasına dahil etme. Madde 14.3.5
+// tamamlayıcısı (2026-08-26): katılımcılar artık sadece kullanıcı değil,
+// Interkom/IP Horn da olabilir (ring group'takiyle aynı TİP:kod deseni).
 //
 // Akış: 1) roomCode için ConfBridge() dialplan extension'ı yazılır,
-// 2) AMI'ye bağlanılıp her katılımcı sip_username'i Originate ile o
-// extension'a bağlanır (katılımcı telefonu çalar, açarsa konferansa
-// düşer — MP'nin kendisi aramıyor, CORE arıyor).
+// 2) AMI'ye bağlanılıp her katılımcının sip hedefi Originate ile o
+// extension'a bağlanır (katılımcı/cihaz çalar, açarsa konferansa düşer —
+// MP'nin kendisi aramıyor, CORE arıyor).
 //
 // Yetki: ADMIN/MAINTAINER/OPERATOR hepsi başlatabilir (Bölüm 10.5'te
 // konferans için ayrı bir kısıt tanımlı değil — panel_app'ten herhangi
@@ -54,27 +85,56 @@ func (h *Handler) Conference(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "geçersiz istek gövdesi")
 		return
 	}
-	if len(req.ParticipantUsernames) < 2 {
+
+	// Geriye dönük uyumluluk: eski istemci participant_usernames gönderdiyse
+	// ve yeni participants alanı boşsa, USER tipine çevir.
+	members := req.Participants
+	if len(members) == 0 && len(req.ParticipantUsernames) > 0 {
+		for _, uname := range req.ParticipantUsernames {
+			members = append(members, conferenceMember{Type: "USER", Code: uname})
+		}
+	}
+	if len(members) < 2 {
 		writeErr(w, http.StatusBadRequest, "konferans için en az 2 katılımcı gerekli")
 		return
 	}
+	for _, m := range members {
+		if !validConferenceMemberType(m.Type) || m.Code == "" {
+			writeErr(w, http.StatusBadRequest, "her katılımcının type'ı USER|INTERKOM|IP_HORN ve code'u dolu olmalı")
+			return
+		}
+	}
 	if req.RoomCode == "" {
-		req.RoomCode = "konf" + strconv.FormatInt(int64(sess.UserID), 10) + strconv.Itoa(len(req.ParticipantUsernames))
+		req.RoomCode = "konf" + strconv.FormatInt(int64(sess.UserID), 10) + strconv.Itoa(len(members))
 	}
 
-	// Katılımcıların SIP kimliklerini çöz (sip_username boşsa o kişi atlanır).
+	// Katılımcıların SIP hedeflerini çöz (ring_groups.go POST akışıyla aynı
+	// desen — USER: users.sip_username, INTERKOM/IP_HORN: panels.panel_code,
+	// presence kontrolü sip_password dolu mu diye bakar).
 	var sipTargets []string
 	var noSip []string
-	for _, uname := range req.ParticipantUsernames {
-		row, err := h.db.QueryRow("SELECT COALESCE(sip_username,'') FROM users WHERE username=" + pg.EscapeLiteral(uname))
-		if err != nil || row[0] == "" {
-			noSip = append(noSip, uname)
+	for _, m := range members {
+		var sipTarget string
+		if m.Type == "USER" {
+			row, err := h.db.QueryRow("SELECT COALESCE(sip_username,'') FROM users WHERE username=" + pg.EscapeLiteral(m.Code))
+			if err == nil {
+				sipTarget = row[0]
+			}
+		} else {
+			row, err := h.db.QueryRow("SELECT COALESCE(sip_password,'') FROM panels WHERE panel_code=" +
+				pg.EscapeLiteral(m.Code) + " AND device_type=" + pg.EscapeLiteral(m.Type))
+			if err == nil && row[0] != "" {
+				sipTarget = m.Code
+			}
+		}
+		if sipTarget == "" {
+			noSip = append(noSip, m.Type+":"+m.Code)
 			continue
 		}
-		sipTargets = append(sipTargets, row[0])
+		sipTargets = append(sipTargets, sipTarget)
 	}
 	if len(sipTargets) < 2 {
-		writeErr(w, http.StatusConflict, "en az 2 katılımcının SIP hesabı tanımlı olmalı — eksik: "+strings.Join(noSip, ", "))
+		writeErr(w, http.StatusConflict, "en az 2 katılımcının SIP hesabı tanımlı/register olabilir olmalı — eksik: "+strings.Join(noSip, ", "))
 		return
 	}
 
