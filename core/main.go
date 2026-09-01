@@ -31,6 +31,7 @@ import (
 
 	"rnvcs-yonetim-servisi/internal/api"
 	"rnvcs-yonetim-servisi/internal/auth"
+	"rnvcs-yonetim-servisi/internal/confwatch"
 	"rnvcs-yonetim-servisi/internal/pg"
 )
 
@@ -144,6 +145,10 @@ func main() {
 
 	h := api.NewHandler(dbConn, provisioningKey, amiAddr, amiUser, amiSecret)
 
+	// Konferans odasında tek kişi kalınca anons çalıp odayı kapatan
+	// arka plan izleyicisi (Konferans notu, 2026-09-01 devamı).
+	confwatch.Start(amiAddr, amiUser, amiSecret)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", h.Healthz)
 	mux.HandleFunc("/api/version", func(w http.ResponseWriter, r *http.Request) {
@@ -168,6 +173,7 @@ func main() {
 	mux.HandleFunc("/api/iax-trunks", h.IAXTrunks)
 	mux.HandleFunc("/api/events", h.Events)
 	mux.HandleFunc("/api/conference", h.Conference)
+	mux.HandleFunc("/api/conference/kick", h.ConferenceKick)
 	mux.HandleFunc("/api/sayfam-tiles", h.SayfamTiles)
 	mux.HandleFunc("/api/sayfam-searches", h.SayfamSearches)
 	// Bakım/Kontrol Terminali (Web UI) — kök yolda sunulur.

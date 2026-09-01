@@ -169,3 +169,84 @@ func (h *Handler) Conference(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, conferenceResponse{RoomCode: req.RoomCode, Invited: invited, Failed: failed})
 }
+
+type kickConferenceRequest struct {
+	RoomCode string `json:"room_code"`
+	Code     string `json:"code"` // katılımcının USER username'i ya da panel_code'u; "all" verilirse odadaki HERKES çıkarılır
+}
+
+// ConferenceKick — POST /api/conference/kick: bir katılımcıyı (ya da
+// code="all" ile odadaki herkesi) konferans odasından çıkarır.
+//
+// Neden gerekli: Interkom/IP Horn gibi cihazların panelde/UI'da kendi
+// "kapat" butonu yok (bkz. Konferans — Kapatma Ekranı ve Kısayol
+// Eksiklikleri notu, 2026-08-27 devamı) — konferansa otomatik cevap verip
+// katılıyorlar ama kendi başlarına ayrılamıyorlar, oda kapatılana kadar
+// asılı kalıyorlar. Bu endpoint operatörün onları AMI ConfbridgeKick ile
+// odadan çıkarmasını sağlar.
+func (h *Handler) ConferenceKick(w http.ResponseWriter, r *http.Request) {
+	sess, ok := h.authenticate(r)
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "oturum geçersiz, tekrar login olun")
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeErr(w, http.StatusMethodNotAllowed, "sadece POST")
+		return
+	}
+	if h.amiAddr == "" || h.amiUser == "" {
+		writeErr(w, http.StatusServiceUnavailable, "konferans özelliği bu sunucuda yapılandırılmamış (RNVCS_AMI_* ortam değişkenleri eksik)")
+		return
+	}
+	var req kickConferenceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "geçersiz istek gövdesi")
+		return
+	}
+	if req.RoomCode == "" {
+		writeErr(w, http.StatusBadRequest, "room_code zorunlu")
+		return
+	}
+	if req.Code == "" {
+		req.Code = "all"
+	}
+
+	amiClient, err := ami.Dial(h.amiAddr, h.amiUser, h.amiSecret)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "Asterisk AMI'ye bağlanılamadı: "+err.Error())
+		return
+	}
+	defer amiClient.Close()
+
+	if req.Code == "all" {
+		if err := amiClient.ConfbridgeKick(req.RoomCode, "all"); err != nil {
+			writeErr(w, http.StatusInternalServerError, "konferans kapatılamadı: "+err.Error())
+			return
+		}
+	} else {
+		members, err := amiClient.ConfbridgeList(req.RoomCode)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, "konferans üyeleri okunamadı: "+err.Error())
+			return
+		}
+		var channel string
+		for _, m := range members {
+			if m.MemberCode() == req.Code {
+				channel = m.Channel
+				break
+			}
+		}
+		if channel == "" {
+			writeErr(w, http.StatusNotFound, "belirtilen katılımcı odada bulunamadı (zaten ayrılmış olabilir)")
+			return
+		}
+		if err := amiClient.ConfbridgeKick(req.RoomCode, channel); err != nil {
+			writeErr(w, http.StatusInternalServerError, "katılımcı çıkarılamadı: "+err.Error())
+			return
+		}
+	}
+
+	_ = h.db.Exec("INSERT INTO event_log (event_type, user_id, detail) VALUES ('CONFIG_CHANGE', " +
+		strconv.Itoa(sess.UserID) + ", " + pg.EscapeLiteral(`{"action":"kick_conference","room_code":"`+req.RoomCode+`","code":"`+req.Code+`"}`) + ")")
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
