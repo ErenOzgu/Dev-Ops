@@ -88,6 +88,9 @@ allow=ulaw,alaw,opus
 auth=%s-auth
 aors=%s
 direct_media=no
+rtp_symmetric=yes
+force_rport=yes
+rewrite_contact=yes
 callerid=%s <%s>
 
 [%s-auth]
