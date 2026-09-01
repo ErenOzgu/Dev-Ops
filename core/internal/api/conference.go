@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"rnvcs-yonetim-servisi/internal/ami"
 	"rnvcs-yonetim-servisi/internal/confbridge"
@@ -105,7 +106,15 @@ func (h *Handler) Conference(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.RoomCode == "" {
-		req.RoomCode = "konf" + strconv.FormatInt(int64(sess.UserID), 10) + strconv.Itoa(len(members))
+		// ÖNEMLİ: oda kodu her seferinde BENZERSİZ olmalı — eskiden sadece
+		// "konf<userID><üyeSayısı>" idi, yani aynı operatör aynı sayıda
+		// katılımcıyla her konferans başlattığında AYNI odaya düşüyordu.
+		// ConfBridge odaları kalıcı olduğundan, düzgün kapatılmamış eski
+		// test kanalları o sabit odada kalıp yeni katılımcılarla karışıyordu
+		// (Konferans — Ses Karışması notu, 2026-09-01). Şimdi zaman damgası
+		// eklenerek her çağrı ayrı bir odaya düşüyor.
+		req.RoomCode = "konf" + strconv.FormatInt(int64(sess.UserID), 10) + "-" +
+			strconv.FormatInt(time.Now().UnixNano()/int64(time.Millisecond)%1000000, 36)
 	}
 
 	// Katılımcıların SIP hedeflerini çöz (ring_groups.go POST akışıyla aynı
