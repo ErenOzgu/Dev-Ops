@@ -105,7 +105,25 @@ func (c *Client) action(fields map[string]string) (map[string]string, error) {
 	if err := c.sendAction(fields); err != nil {
 		return nil, err
 	}
-	return c.readPacket()
+	// AMI bağlantısı üzerinde bizim action'ımızın cevabından ÖNCE ya da
+	// ARADA kendiliğinden Event paketleri gelebilir (ör. Login sonrası
+	// hemen gelen "Event: FullyBooted"). Bunlar bir sonraki action()
+	// çağrısında yanlışlıkla "cevap" sanılıp Response alanı boş olduğu
+	// için hatalı "action başarısız" sonucuna yol açıyordu (gerçek örnek:
+	// Events action'ı, buffer'da bekleyen FullyBooted event'ini okuyup
+	// "Events action başarısız: " diye boş mesajla patlıyordu). Çözüm:
+	// gerçek "Response:" alanı içeren paket gelene kadar Event
+	// paketlerini atlayarak okumaya devam et.
+	for {
+		pkt, err := c.readPacket()
+		if err != nil {
+			return nil, err
+		}
+		if pkt["Response"] != "" {
+			return pkt, nil
+		}
+		// Response alanı yok = bu bir Event paketi, atla ve devam et.
+	}
 }
 
 // Originate, bir SIP uç noktasını (sipUsername) arayıp, cevap verirse
