@@ -159,8 +159,7 @@ type=user
 admin=no
 marked=no
 EOF
-  asterisk -rx "module load res_confbridge.so" 2>/dev/null || asterisk -rx "module reload res_confbridge.so" || true
-  asterisk -rx "confbridge reload" || true
+  asterisk -rx "module reload app_confbridge.so" || true
   echo "    [rnvcs_bridge]/[rnvcs_user] profilleri eklendi."
 else
   echo "    confbridge.conf'ta [rnvcs_bridge] zaten var, dokunulmadı."
