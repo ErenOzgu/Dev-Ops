@@ -156,6 +156,54 @@ EOF
 chmod 644 /etc/odbc.ini
 
 mkdir -p /etc/asterisk
+
+# PJSIP transport (UDP/TCP 5060) — Ubuntu'nun asterisk-config paketindeki
+# pjsip.conf TAMAMEN yorum satırı (örnek/şablon) geliyor, aktif hiçbir
+# transport tanımlamıyor. Bu olmadan Asterisk 5060'ta hiçbir şey dinlemez,
+# panel/SIP cihazları "yanit zaman asimi" hatasıyla register OLAMAZ
+# (2026-09-02'de bulundu — 10.1.82.66 kurulumunda panel register olamadı).
+if [[ ! -f /etc/asterisk/pjsip_transport.conf ]]; then
+  cat > /etc/asterisk/pjsip_transport.conf <<EOF
+[transport-udp]
+type=transport
+protocol=udp
+bind=0.0.0.0
+
+[transport-tcp]
+type=transport
+protocol=tcp
+bind=0.0.0.0
+EOF
+  grep -qxF '#include pjsip_transport.conf' /etc/asterisk/pjsip.conf 2>/dev/null \
+    || sed -i '1i #include pjsip_transport.conf' /etc/asterisk/pjsip.conf
+  echo "    pjsip_transport.conf oluşturuldu ([transport-udp]/[transport-tcp], 0.0.0.0:5060)."
+else
+  echo "    pjsip_transport.conf zaten var, dokunulmadı."
+fi
+
+# PJSIP transport (UDP/TCP 5060) — Ubuntu'nun asterisk-config paketindeki
+# pjsip.conf TAMAMEN yorum satırı (örnek/şablon) geliyor, aktif hiçbir
+# transport tanımlamıyor. Bu olmadan Asterisk 5060'ta hiçbir şey dinlemez,
+# panel/SIP cihazları "yanit zaman asimi" hatasıyla register OLAMAZ
+# (2026-09-02'de bulundu — 10.1.82.66 kurulumunda panel register olamadı).
+if [[ ! -f /etc/asterisk/pjsip_transport.conf ]]; then
+  cat > /etc/asterisk/pjsip_transport.conf <<EOF
+[transport-udp]
+type=transport
+protocol=udp
+bind=0.0.0.0
+
+[transport-tcp]
+type=transport
+protocol=tcp
+bind=0.0.0.0
+EOF
+  grep -qxF '#include pjsip_transport.conf' /etc/asterisk/pjsip.conf 2>/dev/null \
+    || sed -i '1i #include pjsip_transport.conf' /etc/asterisk/pjsip.conf
+  echo "    pjsip_transport.conf oluşturuldu ([transport-udp]/[transport-tcp], 0.0.0.0:5060)."
+else
+  echo "    pjsip_transport.conf zaten var, dokunulmadı."
+fi
 if [[ ! -f /etc/asterisk/res_odbc.conf.rnvcs-orig ]] && [[ -f /etc/asterisk/res_odbc.conf ]]; then
   cp /etc/asterisk/res_odbc.conf /etc/asterisk/res_odbc.conf.rnvcs-orig
 fi
