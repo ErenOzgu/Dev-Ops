@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # =========================================================
-# RNVCS-CORE — Migration Uygulama Script'i
+# RNVCS-CORE — Migration Uygulama Script'i (v2 — otomatik keşif)
 #
-# core_kurulum.sh TAMAMLANDIKTAN SONRA (rnvcs veritabanı/kullanıcısı
-# hazır olduktan sonra) çalıştırılır. Bölüm 10.3 şemasını ve
-# asterisk_cdr tablosunu rnvcs veritabanına migration olarak yükler.
+# migrations/ klasöründeki TÜM core_migration_*.sql dosyalarını
+# isim sırasına göre otomatik bulup uygular. Yeni bir migration
+# eklemek için tek yapılması gereken migrations/ altına numarası
+# bir sonraki olan bir dosya koymak — bu script'e dokunmaya gerek yok.
 #
-# Kullanım (core_migration_001_init.sql aynı klasörde iken):
-#   sudo bash core_migrate.sh
+# Kullanım: sudo bash core_migrate.sh
 # =========================================================
 
 set -euo pipefail
@@ -18,45 +18,42 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MIGRATION_FILE="$SCRIPT_DIR/core_migration_001_init.sql"
-MIGRATION_FILE_002="$SCRIPT_DIR/core_migration_002_user_sip_identity.sql"
+MIGRATIONS_DIR="$SCRIPT_DIR/../migrations"
 DB_NAME="rnvcs"
 
-if [[ ! -f "$MIGRATION_FILE" ]]; then
-  echo "HATA: $MIGRATION_FILE bulunamadı. Bu script'i core_migration_001_init.sql ile aynı klasörde çalıştır."
+if [[ ! -d "$MIGRATIONS_DIR" ]]; then
+  echo "HATA: $MIGRATIONS_DIR bulunamadı."
   exit 1
 fi
 
-# NOT: migration dosyası genelde bir kullanıcının ev dizininde (örn.
-# /home/onur/) duruyor. Ev dizinlerinin izinleri (genelde 750) "postgres"
-# sistem kullanıcısının o dizine ERİŞMESİNİ engeller — dosyanın kendisi
-# okunabilir olsa bile "postgres" oraya giremediği için "Permission
-# denied" alınır. Çözüm: dosyayı herkesin erişebildiği /tmp altına
-# kopyalayıp psql -f'i oradan çalıştırmak.
-TMP_MIGRATION="/tmp/rnvcs_core_migration_001_init.sql"
-cp "$MIGRATION_FILE" "$TMP_MIGRATION"
-chmod 644 "$TMP_MIGRATION"
+shopt -s nullglob
+FILES=("$MIGRATIONS_DIR"/core_migration_*.sql)
+shopt -u nullglob
 
-echo "==> [1/3] Migration 001 uygulanıyor ($DB_NAME veritabanına)..."
-sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 -f "$TMP_MIGRATION"
-rm -f "$TMP_MIGRATION"
-
-# Bölüm 10.19: SIP kimliği panelden kullanıcıya taşındı (komutan/astsubay
-# senaryosu — birden fazla operatör aynı panelde farklı SIP kimlikleriyle
-# login olabiliyor). Bu migration speed_dials/ring_group_members'ı YENİDEN
-# OLUŞTURUR (BREAKING CHANGE) — sadece pilot/test verisi varsa güvenlidir.
-if [[ -f "$MIGRATION_FILE_002" ]]; then
-  TMP_MIGRATION_002="/tmp/rnvcs_core_migration_002_user_sip_identity.sql"
-  cp "$MIGRATION_FILE_002" "$TMP_MIGRATION_002"
-  chmod 644 "$TMP_MIGRATION_002"
-  echo "==> [2/3] Migration 002 uygulanıyor (Bölüm 10.19 — kullanıcı bazlı SIP kimliği, DİKKAT: speed_dials/ring_group_members yeniden oluşturulacak)..."
-  sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 -f "$TMP_MIGRATION_002"
-  rm -f "$TMP_MIGRATION_002"
-else
-  echo "==> [2/3] Migration 002 dosyası bulunamadı, atlanıyor ($MIGRATION_FILE_002 aynı klasörde değil)."
+if [[ ${#FILES[@]} -eq 0 ]]; then
+  echo "HATA: $MIGRATIONS_DIR içinde hiç core_migration_*.sql dosyası yok."
+  exit 1
 fi
 
-echo "==> [3/3] Asterisk yeniden başlatılıyor (yeni asterisk_cdr tablosunu görmesi için)..."
+# İsme göre sırala (001, 002, 003... doğal sırada gelir)
+IFS=$'\n' SORTED=($(sort <<<"${FILES[*]}")); unset IFS
+
+echo "==> Bulunan migration dosyaları (uygulama sırası):"
+for f in "${SORTED[@]}"; do echo "    - $(basename "$f")"; done
+echo ""
+
+i=1
+for f in "${SORTED[@]}"; do
+  TMP="/tmp/rnvcs_$(basename "$f")"
+  cp "$f" "$TMP"
+  chmod 644 "$TMP"
+  echo "==> [$i/${#SORTED[@]}] $(basename "$f") uygulanıyor..."
+  sudo -u postgres psql -d "$DB_NAME" -v ON_ERROR_STOP=1 -f "$TMP"
+  rm -f "$TMP"
+  i=$((i+1))
+done
+
+echo "==> Asterisk yeniden başlatılıyor..."
 systemctl restart asterisk
 sleep 2
 
@@ -66,7 +63,6 @@ echo " MIGRATION ÖZETİ — tablo bazında doğrulama"
 echo "========================================================="
 
 check_table() {
-  # $1 = tablo adı, $2 = ekranda gösterilecek etiket
   if sudo -u postgres psql -d "$DB_NAME" -tc \
       "SELECT 1 FROM information_schema.tables WHERE table_name='$1'" \
       | grep -q 1; then
@@ -90,20 +86,19 @@ echo " -- Asterisk Servisi --"
 if systemctl is-active --quiet asterisk; then
   printf "  [OK]   Asterisk servisi (restart sonrası aktif)\n"
 else
-  printf "  [HATA] Asterisk servisi restart sonrası aktif değil (systemctl status asterisk)\n"
+  printf "  [HATA] Asterisk servisi restart sonrası aktif değil\n"
 fi
 
 echo " -- ODBC Bağlantı Testi --"
-if asterisk -rx "odbc show all" 2>/dev/null | grep -qi "Connected: Yes"; then
+ODBC_OUT="$(asterisk -rx "odbc show all" 2>/dev/null || true)"
+if echo "$ODBC_OUT" | grep -qi "Connected: Yes"; then
   printf "  [OK]   Asterisk res_odbc 'rnvcs' bağlantısı canlı\n"
+elif echo "$ODBC_OUT" | grep -qE "active connections: [1-9]"; then
+  printf "  [OK]   Asterisk res_odbc 'rnvcs' bağlantısı canlı (aktif bağlantı var)\n"
 else
-  printf "  [HATA] Asterisk res_odbc bağlantısı doğrulanamadı (asterisk -rx \"odbc show all\")\n"
+  printf "  [HATA] Asterisk res_odbc bağlantısı doğrulanamadı\n"
 fi
 
 echo "========================================================="
-echo " Migration tamamlandı."
-echo ""
-echo " Sırada: /etc/asterisk/pjsip.conf ve /etc/asterisk/extensions.conf"
-echo " içine ilk panel register + basit dialplan tanımını ekleyip"
-echo " gerçek bir SIP register/çağrı testi yapmak (Bölüm 10.4)."
+echo " Migration tamamlandı ($((i-1)) dosya uygulandı)."
 echo "========================================================="
