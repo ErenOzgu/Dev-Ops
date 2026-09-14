@@ -93,14 +93,17 @@ CREATE TABLE IF NOT EXISTS ring_group_members (
 -- ---------------------------------------------------------
 CREATE TABLE IF NOT EXISTS speed_dials (
   id           SERIAL PRIMARY KEY,
-  panel_id     INT NOT NULL REFERENCES panels(id) ON DELETE CASCADE,
+  panel_id     INT REFERENCES panels(id) ON DELETE CASCADE,
+  user_id      INT REFERENCES users(id) ON DELETE CASCADE,
   label        TEXT NOT NULL,
-  target_type  TEXT NOT NULL,              -- PANEL | RING_GROUP | TRUNK_REMOTE
+  target_type  TEXT NOT NULL,              -- USER | PANEL | RING_GROUP | TRUNK_REMOTE | NUMBER
   target_value TEXT NOT NULL,
   position     INT NOT NULL DEFAULT 0,
-  color_hint   TEXT,
-  CONSTRAINT chk_speed_dials_target_type CHECK (target_type IN ('PANEL','RING_GROUP','TRUNK_REMOTE'))
+  color_hint   TEXT
 );
+ALTER TABLE speed_dials ADD COLUMN IF NOT EXISTS user_id INT REFERENCES users(id) ON DELETE CASCADE;
+ALTER TABLE speed_dials ALTER COLUMN panel_id DROP NOT NULL;
+ALTER TABLE speed_dials DROP CONSTRAINT IF EXISTS chk_speed_dials_target_type;
 
 -- ---------------------------------------------------------
 -- 6) IAX2 Trunk tanımları (sunucular arası bağlantı)
