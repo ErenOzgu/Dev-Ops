@@ -25,3 +25,7 @@ go.work.sum
 # env file
 .env
 
+
+kimlik_bilgileri*.md
+*.env
+core/rnvcs_release_v1.6.0/
