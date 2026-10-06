@@ -1,0 +1,110 @@
+name: Release (derle + paketle + yedek CORE'a otomatik dağıt)
+
+# Sadece "v1.2.3" gibi sürüm etiketleri push edildiğinde çalışır.
+# Üretime DOKUNMAZ — sadece yedek CORE'a (canary) kadar otomatik gider.
+# Üretime dağıtım ayrı, elle tetiklenen deploy-production.yml'dedir (bilinçli tasarım).
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build-and-package:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - name: Kodu çek
+        uses: actions/checkout@v4
+
+      - name: Go kur
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+
+      - name: Sürüm numarasını çıkar
+        id: ver
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Sürüm: ${VERSION}"
+
+      - name: CORE derle
+        run: |
+          cd core
+          GIT_HASH=$(git rev-parse --short HEAD)
+          go build -ldflags "-X main.Version=${{ steps.ver.outputs.version }}-${GIT_HASH}" \
+            -o ../dist/rnvcs-yonetim-servisi .
+
+      - name: panel-backend derle
+        run: |
+          cd panel-backend
+          GIT_HASH=$(git rev-parse --short HEAD)
+          go build -ldflags "-X main.Version=${{ steps.ver.outputs.version }}-${GIT_HASH}" \
+            -o ../dist/rnvcs-panel-backend .
+
+      - name: Release paketini oluştur
+        run: |
+          set -e
+          PKG_DIR="dist/rnvcs-v${{ steps.ver.outputs.version }}"
+          mkdir -p "$PKG_DIR"
+          cp dist/rnvcs-yonetim-servisi "$PKG_DIR/"
+          cp dist/rnvcs-panel-backend "$PKG_DIR/"
+          cp -r migrations "$PKG_DIR/"
+          cp -r panel-app "$PKG_DIR/"
+          cp -r infra/systemd "$PKG_DIR/systemd"
+          cp -r scripts "$PKG_DIR/scripts"
+          echo "${{ steps.ver.outputs.version }}" > "$PKG_DIR/VERSION"
+          cp docs/CHANGELOG.md "$PKG_DIR/CHANGELOG.md" 2>/dev/null || true
+          tar czf "dist/rnvcs-v${{ steps.ver.outputs.version }}.tar.gz" -C dist "rnvcs-v${{ steps.ver.outputs.version }}"
+          ls -la dist/
+
+      - name: Paketi artefakt olarak sakla
+        uses: actions/upload-artifact@v3
+        with:
+          name: rnvcs-release-tar
+          path: dist/rnvcs-v${{ steps.ver.outputs.version }}.tar.gz
+          retention-days: 90
+
+  deploy-yedek-core:
+    needs: build-and-package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Paketi indir
+        uses: actions/download-artifact@v3
+        with:
+          name: rnvcs-release-tar
+          path: dist/
+
+      - name: SSH anahtarını hazırla
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.YEDEK_CORE_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Tar'ı yedek CORE'a gönder
+        run: |
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
+            dist/rnvcs-v${{ needs.build-and-package.outputs.version }}.tar.gz \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.YEDEK_CORE_HOST }}:/opt/rnvcs/incoming/"
+
+      - name: Uzaktan kurulum betiğini çalıştır
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.YEDEK_CORE_HOST }}" \
+            "sudo /opt/rnvcs/scripts/deploy_apply.sh /opt/rnvcs/incoming/rnvcs-v${{ needs.build-and-package.outputs.version }}.tar.gz"
+
+      - name: Uzaktan smoke test çalıştır
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.YEDEK_CORE_HOST }}" \
+            "sudo /opt/rnvcs/scripts/rnvcs_smoke_test.sh -e || true"
+        # Bu adım kırmızı yanarsa (exit code != 0) pipeline durur — üretime asla gitmez.
+
+      - name: Sonucu özetle
+        if: always()
+        run: |
+          echo "Sürüm v${{ needs.build-and-package.outputs.version }} yedek CORE'a (${{ secrets.YEDEK_CORE_HOST }}) dağıtıldı."
+          echo "Üretime almak için: Gitea → Actions → 'Deploy Production' workflow'unu ELLE tetikleyin."
