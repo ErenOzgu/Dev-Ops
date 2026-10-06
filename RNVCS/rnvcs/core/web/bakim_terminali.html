@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RNVCS Bakım / Kontrol Terminali</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel2: #253449;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #22c55e;
+    --accent2: #3b82f6;
+    --danger: #ef4444;
+    --warn: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 {
+    font-size: 16px;
+    margin: 0;
+    letter-spacing: 0.3px;
+  }
+  header h1 span { color: var(--accent); }
+  #whoami { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 12px; }
+  #whoami button {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  #whoami button:hover { background: var(--border); }
+
+  #login-screen {
+    max-width: 360px;
+    margin: 12vh auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px;
+  }
+  #login-screen h2 { margin-top: 0; font-size: 18px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .field input, .field select {
+    width: 100%;
+    background: #0b1220;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 9px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  button.primary {
+    width: 100%;
+    background: var(--accent2);
+    border: none;
+    color: white;
+    padding: 10px;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  button.primary:hover { filter: brightness(1.1); }
+  button.danger { background: var(--danger); border: none; color: white; padding: 6px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 600; }
+  button.danger:hover { filter: brightness(1.1); }
+  .err { color: var(--danger); font-size: 13px; margin-top: 10px; min-height: 16px; }
+  .ok { color: var(--accent); font-size: 13px; margin-top: 10px; min-height: 16px; }
+
+  #app { display: none; padding: 24px; max-width: 1100px; margin: 0 auto; }
+  nav.tabs { display: flex; gap: 6px; margin-bottom: 20px; border-bottom: 1px solid var(--border); }
+  nav.tabs button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    padding: 10px 16px;
+    cursor: pointer;
+    font-size: 14px;
+    border-bottom: 2px solid transparent;
+  }
+  nav.tabs button.active { color: var(--text); border-bottom-color: var(--accent2); }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .card h3 { margin-top: 0; font-size: 15px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge.on { background: rgba(34,197,94,0.15); color: var(--accent); }
+  .badge.off { background: rgba(239,68,68,0.15); color: var(--danger); }
+  .badge.role-ADMIN { background: rgba(245,158,11,0.15); color: var(--warn); }
+  .badge.role-MAINTAINER { background: rgba(59,130,246,0.15); color: var(--accent2); }
+  .badge.role-OPERATOR { background: rgba(148,163,184,0.15); color: var(--muted); }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .form-actions { display: flex; align-items: center; gap: 12px; }
+  .form-actions button.primary { width: auto; padding: 9px 18px; }
+  .checkbox-row { display: flex; gap: 18px; align-items: center; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .checkbox-row label { display: flex; align-items: center; gap: 6px; }
+  .msg { font-size: 13px; margin-left: 4px; }
+  .msg.err { color: var(--danger); }
+  .msg.ok { color: var(--accent); }
+  .hint { font-size: 12px; color: var(--muted); margin-top: -6px; margin-bottom: 14px; }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <h2>RNVCS <span style="color:var(--accent2)">Bakım / Kontrol Terminali</span></h2>
+  <div class="field">
+    <label>Kullanıcı adı</label>
+    <input id="login-username" type="text" autocomplete="username">
+  </div>
+  <div class="field">
+    <label>Şifre</label>
+    <input id="login-password" type="password" autocomplete="current-password">
+  </div>
+  <button class="primary" onclick="doLogin()">Giriş Yap</button>
+  <div class="err" id="login-error"></div>
+</div>
+
+<div id="app">
+  <header>
+    <h1>RNVCS <span>Bakım / Kontrol Terminali</span> <span id="app-version" style="font-size:12px; font-weight:normal; opacity:0.7;"></span></h1>
+    <div id="whoami">
+      <span id="whoami-text"></span>
+      <button onclick="doLogout()">Çıkış</button>
+    </div>
+  </header>
+
+  <div style="padding: 24px; max-width: 1100px; margin: 0 auto;">
+    <nav class="tabs">
+      <button id="tab-btn-panels" class="active" onclick="switchTab('panels')">Paneller</button>
+      <button id="tab-btn-users" onclick="switchTab('users')">Kullanıcılar</button>
+      <button id="tab-btn-perms" onclick="switchTab('perms')">Yetkiler</button>
+      <button id="tab-btn-ringgroups" onclick="switchTab('ringgroups')">Çatal Arama</button>
+      <button id="tab-btn-speeddials" onclick="switchTab('speeddials')">Kısayollar</button>
+      <button id="tab-btn-trunks" onclick="switchTab('trunks')">Trunk'lar</button>
+      <button id="tab-btn-events" onclick="switchTab('events')">Olay Kayıtları</button>
+      <button id="tab-btn-callrecords" onclick="switchTab('callrecords')">Arama Kayıtları</button>
+    </nav>
+
+    <!-- PANELLER -->
+    <div id="tab-panels">
+      <div class="card">
+        <h3>Yeni Panel Tanımla</h3>
+        <div class="form-grid">
+          <div class="field"><label>Panel/Cihaz Kodu (örn. 1013)</label><input id="np-code" type="text"></div>
+          <div class="field"><label>Görünen Ad</label><input id="np-name" type="text"></div>
+          <div class="field"><label>Konum</label><input id="np-loc" type="text"></div>
+          <div class="field">
+            <label>Cihaz Tipi</label>
+            <select id="np-devtype">
+              <option value="PANEL">PANEL (Muhabere Paneli)</option>
+              <option value="INTERKOM">INTERKOM</option>
+              <option value="IP_HORN">IP HORN</option>
+            </select>
+          </div>
+        </div>
+        <div class="hint">SIP kimliği KULLANICIYA aittir — PANEL tipi kayıtlar SIP register OLMAZ, sadece bir yetki/tanım etiketidir ve sesli mesaj kutusu alır. INTERKOM/IP HORN ise gerçek donanım olduğundan kendi SIP hesabıyla register olur (Anons Sistemi FKT madde 2).</div>
+        <div class="form-actions">
+          <button class="primary" onclick="createPanel()">Oluştur</button>
+          <span class="msg" id="np-msg"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Panel / Cihaz Listesi</h3>
+        <div class="hint">Bu buton PANEL tipi kayıtların sesli mesaj kutularını, INTERKOM/IP HORN tipi kayıtların ise eksikse SIP hesabını hazırlar/onarır. Tekrar basmak zarar vermez.</div>
+        <div class="form-actions" style="margin-bottom:14px">
+          <button onclick="syncPanels()">Asterisk'e Senkronla</button>
+          <span class="msg" id="sync-msg"></span>
+        </div>
+        <table>
+          <thead><tr><th>ID</th><th>Kod</th><th>Görünen Ad</th><th>Konum</th><th>Tip</th><th>Durum</th></tr></thead>
+          <tbody id="panels-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- KULLANICILAR -->
+    <div id="tab-users" style="display:none">
+      <div class="card">
+        <h3>Yeni Kullanıcı Oluştur</h3>
+        <div class="hint">Kullanıcı oluşturmak sadece ADMIN rolündeki hesaplarla mümkündür (Bölüm 10.5 yetki matrisi).</div>
+        <div class="form-grid">
+          <div class="field"><label>Kullanıcı Adı</label><input id="nu-username" type="text"></div>
+          <div class="field"><label>Ad Soyad</label><input id="nu-fullname" type="text"></div>
+          <div class="field"><label>Şifre</label><input id="nu-password" type="text"></div>
+          <div class="field">
+            <label>Rol</label>
+            <select id="nu-role">
+              <option value="OPERATOR">OPERATOR</option>
+              <option value="MAINTAINER">MAINTAINER</option>
+              <option value="ADMIN">ADMIN</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="primary" onclick="createUser()">Kullanıcı Oluştur</button>
+          <span class="msg" id="nu-msg"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Kullanıcı Listesi</h3>
+        <table>
+          <thead><tr><th>ID</th><th>Kullanıcı Adı</th><th>Ad Soyad</th><th>Rol</th><th>Durum</th><th>SIP Hesabı</th><th>İşlemler</th></tr></thead>
+          <tbody id="users-tbody"></tbody>
+        </table>
+      </div>
+      <div class="card" id="edit-user-card" style="display:none">
+        <h3>Kullanıcı Düzenle: <span id="eu-username-label"></span></h3>
+        <div class="hint">Sadece doldurduğun/değiştirdiğin alanlar güncellenir. Şifreyi boş bırakırsan mevcut şifre değişmez.</div>
+        <input type="hidden" id="eu-id">
+        <div class="form-grid">
+          <div class="field"><label>Ad Soyad</label><input id="eu-fullname" type="text"></div>
+          <div class="field">
+            <label>Rol</label>
+            <select id="eu-role">
+              <option value="OPERATOR">OPERATOR</option>
+              <option value="MAINTAINER">MAINTAINER</option>
+              <option value="ADMIN">ADMIN</option>
+            </select>
+          </div>
+          <div class="field"><label>Yeni Şifre (opsiyonel)</label><input id="eu-password" type="text"></div>
+          <div class="field"><label><input type="checkbox" id="eu-enabled"> Hesap aktif (kapatırsan login olamaz, açık oturumu hemen sonlanır)</label></div>
+        </div>
+        <div class="form-actions">
+          <button class="primary" onclick="saveUserEdit()">Değişiklikleri Kaydet</button>
+          <button onclick="closeUserEdit()">İptal</button>
+          <span class="msg" id="eu-msg"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Kullanıcı SIP Hesabı Ata / Güncelle</h3>
+        <div class="hint">Bölüm 10.19: bir kullanıcının Asterisk'e register olabilmesi (panelden login olunca otomatik) için önce buradan bir SIP hesabı tanımlanmalı. SADECE ADMIN yapabilir.</div>
+        <div class="form-grid">
+          <div class="field">
+            <label>Kullanıcı</label>
+            <select id="usip-user"></select>
+          </div>
+          <div class="field"><label>SIP Kullanıcı Adı (Asterisk endpoint adı)</label><input id="usip-sipuser" type="text" placeholder="orn. komutan"></div>
+          <div class="field"><label>SIP Şifresi</label><input id="usip-sippass" type="text"></div>
+        </div>
+        <div class="form-actions">
+          <button class="primary" onclick="setUserSip()">SIP Hesabını Kaydet</button>
+          <span class="msg" id="usip-msg"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- YETKİLER -->
+    <div id="tab-perms" style="display:none">
+      <div class="card">
+        <h3>Kullanıcı ↔ Panel Yetkisi Ata</h3>
+        <div class="form-grid">
+          <div class="field">
+            <label>Kullanıcı</label>
+            <select id="perm-user" onchange="loadCurrentPermission()"></select>
+          </div>
+          <div class="field">
+            <label>Panel</label>
+            <select id="perm-panel" onchange="loadCurrentPermission()"></select>
+          </div>
+        </div>
+        <div class="checkbox-row">
+          <label><input type="checkbox" id="perm-login"> Login yetkisi</label>
+          <label><input type="checkbox" id="perm-call"> Arama yetkisi</label>
+          <label><input type="checkbox" id="perm-anons"> Anons yetkisi</label>
+          <label><input type="checkbox" id="perm-config"> Konfigürasyon yetkisi</label>
+        </div>
+        <div class="form-actions" style="margin-top:14px">
+          <button class="primary" onclick="assignPermission()">Yetkiyi Kaydet</button>
+          <span class="msg" id="perm-msg"></span>
+        </div>
+      </div>
+      <div class="hint">Not: yukarıdaki kutucuklar, kullanıcı+panel seçince o çiftin DB'deki GERÇEK yetkisini gösterir (2026-07-22 düzeltmesi — eskiden her zaman aynı statik varsayılanla açılıp DB durumunu yansıtmıyordu, bu da "kaydettim ama çalışmadı" karışıklığına yol açıyordu). Hiç yetki atanmamışsa hepsi boş/false görünür — bu normaldir, "Yetkiyi Kaydet" ile ilk atamayı yapman gerekir.</div>
+    </div>
+
+    <!-- ÇATAL ARAMA (RING GROUP) -->
+    <div id="tab-ringgroups" style="display:none">
+      <div class="card">
+        <h3>Yeni Çatal Arama Tanımla</h3>
+        <div class="hint">Aranınca listedeki tüm üyeler aynı anda çalar — üye bir KULLANICI olabilir (hangi panelde login'se orada çalar) ya da bir INTERKOM/IP HORN/PANEL cihazı olabilir (Anons Sistemi FKT madde 3: üyelik cihaz tipinden bağımsız). Üye kullanıcıların önce SIP hesabı tanımlı olmalı (Kullanıcılar sekmesi); cihazların SIP hesabı otomatik (Paneller sekmesinde oluşturulur).</div>
+        <div class="form-grid">
+          <div class="field"><label>Grup Kodu (örn. 900)</label><input id="nrg-code" type="text"></div>
+          <div class="field"><label>Görünen Ad</label><input id="nrg-name" type="text"></div>
+          <div class="field"><label>Zaman Aşımı (sn)</label><input id="nrg-timeout" type="number" value="30"></div>
+        </div>
+        <div class="field">
+          <label>Üyeler — "TİP:kod" biçiminde, virgülle ayrılmış (TİP: USER, PANEL, INTERKOM ya da IP_HORN)</label>
+          <input id="nrg-members" type="text" placeholder="USER:komutan,USER:astsubay,IP_HORN:horn1">
+        </div>
+        <div class="form-actions">
+          <button class="primary" onclick="createRingGroup()">Çatal Arama Oluştur</button>
+          <span class="msg" id="nrg-msg"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Çatal Arama Listesi</h3>
+        <table>
+          <thead><tr><th>ID</th><th>Grup Kodu</th><th>Görünen Ad</th><th>Strateji</th><th>Zaman Aşımı</th><th>Üyeler</th></tr></thead>
+          <tbody id="ringgroups-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- KISAYOLLAR (SPEED DIALS) -->
+    <div id="tab-speeddials" style="display:none">
+      <div class="card">
+        <h3>Yeni Kısayol Tanımla</h3>
+        <div class="hint">Bölüm 10.19: kısayollar artık kullanıcıya ait — operatör hangi panelde login olursa kendi kısayollarını orada görür.</div>
+        <div class="form-grid">
+          <div class="field">
+            <label>Kullanıcı</label>
+            <select id="nsd-panel"></select>
+          </div>
+          <div class="field"><label>Etiket</label><input id="nsd-label" type="text"></div>
+          <div class="field">
+            <label>Hedef Türü</label>
+            <select id="nsd-target-type">
+              <option value="USER">USER</option>
+              <option value="RING_GROUP">RING_GROUP</option>
+              <option value="TRUNK_REMOTE">TRUNK_REMOTE</option>
+              <option value="NUMBER">NUMBER</option>
+              <option value="PANEL">PANEL</option>
+              <option value="INTERKOM">INTERKOM</option>
+              <option value="IP_HORN">IP HORN</option>
+              <option value="CONFERENCE">KONFERANS</option>
+            </select>
+          </div>
+          <div class="field"><label>Hedef Değer (kullanıcı adı / grup kodu / numara)</label><input id="nsd-target-value" type="text"></div>
+          <div class="field"><label>Sıra</label><input id="nsd-position" type="number" value="0"></div>
+          <div class="field"><label>Renk İpucu (opsiyonel)</label><input id="nsd-color" type="text" placeholder="#22c55e"></div>
+        </div>
+        <div class="form-actions">
+          <button class="primary" onclick="createSpeedDial()">Kısayol Oluştur</button>
+          <span class="msg" id="nsd-msg"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Kısayol Listesi</h3>
+        <table>
+          <thead><tr><th>ID</th><th>Kullanıcı</th><th>Etiket</th><th>Hedef Türü</th><th>Hedef</th><th>Sıra</th></tr></thead>
+          <tbody id="speeddials-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TRUNK'LAR (IAX2) -->
+    <div id="tab-trunks" style="display:none">
+      <div class="card">
+        <h3>Yeni IAX2 Trunk Tanımla</h3>
+        <div class="hint">Sadece ADMIN yetkisiyle tanımlanabilir (Bölüm 10.5). Uzak sunucuda simetrik bir trunk tanımı olmalı.</div>
+        <div class="form-grid">
+          <div class="field"><label>Trunk Adı</label><input id="ntr-name" type="text"></div>
+          <div class="field"><label>Uzak Host (IP/FQDN)</label><input id="ntr-host" type="text"></div>
+          <div class="field"><label>Uzak Port</label><input id="ntr-port" type="number" value="4569"></div>
+          <div class="field"><label>Secret</label><input id="ntr-secret" type="text"></div>
+          <div class="field"><label>Prefix (örn. 9)</label><input id="ntr-prefix" type="text"></div>
+        </div>
+        <div class="form-actions">
+          <button class="primary" onclick="createTrunk()">Trunk Oluştur</button>
+          <span class="msg" id="ntr-msg"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Trunk Listesi</h3>
+        <table>
+          <thead><tr><th>ID</th><th>Trunk Adı</th><th>Uzak Host</th><th>Port</th><th>Prefix</th><th>Durum</th></tr></thead>
+          <tbody id="trunks-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- OLAY KAYITLARI (EVENT LOG / CDR) -->
+    <div id="tab-events" style="display:none">
+      <div class="card">
+        <h3>Son Olay Kayıtları</h3>
+        <div class="hint">ADMIN/MAINTAINER tüm olayları görür; OPERATOR sadece kendi izinli olduğu panellerin olaylarını görür (Bölüm 10.5).</div>
+        <div class="form-actions" style="margin-bottom:14px">
+          <button class="primary" onclick="loadEvents()">Yenile</button>
+        </div>
+        <table>
+          <thead><tr><th>Zaman</th><th>Olay Türü</th><th>Panel</th><th>Kullanıcı</th><th>Karşı Taraf</th><th>Süre (sn)</th></tr></thead>
+          <tbody id="events-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="tab-callrecords" style="display:none">
+      <div class="card">
+        <h3>Arama Kayıtları</h3>
+        <div class="hint">Kim kimi ne zaman aradı (Bölüm 10.22). Numaralar panele aittir; kullanıcı adları, aramanın yapıldığı anda ilgili panelde oturum açmış olan kişiden çıkarılır. "→ Sesli Mesaj" işaretli satırlarda arama karşılanmadı, arayan mesaj bıraktı.</div>
+        <div class="form-actions" style="margin-bottom:14px">
+          <button class="primary" onclick="loadCallRecords()">Yenile</button>
+        </div>
+        <table>
+          <thead><tr><th>Başlangıç</th><th>Arayan</th><th>Aranan</th><th>Sonuç</th><th>Süre (sn)</th></tr></thead>
+          <tbody id="callrecords-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let TOKEN = localStorage.getItem('rnvcs_token') || null;
+let ROLE = localStorage.getItem('rnvcs_role') || null;
+let USERNAME = localStorage.getItem('rnvcs_username') || null;
+
+function api(path, opts) {
+  opts = opts || {};
+  opts.headers = opts.headers || {};
+  if (TOKEN) opts.headers['Authorization'] = 'Bearer ' + TOKEN;
+  return fetch(path, opts).then(async r => {
+    const text = await r.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch (e) { data = text; }
+    if (!r.ok) {
+      const errMsg = (data && data.error) ? data.error : ('HTTP ' + r.status);
+      throw new Error(errMsg);
+    }
+    return data;
+  });
+}
+
+fetch('/api/version').then(r => r.json()).then(d => {
+  document.getElementById('app-version').textContent = 'v' + d.version;
+}).catch(() => {});
+
+function doLogin() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+  if (!username || !password) {
+    errEl.textContent = 'Kullanıcı adı ve şifre gerekli.';
+    return;
+  }
+  fetch('/api/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password })
+  }).then(async r => {
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      throw new Error(data.error || 'Giriş başarısız.');
+    }
+    TOKEN = data.token;
+    ROLE = data.role;
+    USERNAME = data.username;
+    localStorage.setItem('rnvcs_token', TOKEN);
+    localStorage.setItem('rnvcs_role', ROLE);
+    localStorage.setItem('rnvcs_username', USERNAME);
+    showApp();
+  }).catch(e => {
+    errEl.textContent = e.message || 'Giriş başarısız (kullanıcı adı/şifre hatalı olabilir).';
+  });
+}
+
+function doLogout() {
+  TOKEN = null; ROLE = null; USERNAME = null;
+  localStorage.removeItem('rnvcs_token');
+  localStorage.removeItem('rnvcs_role');
+  localStorage.removeItem('rnvcs_username');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'block';
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('whoami-text').textContent = USERNAME + ' (' + ROLE + ')';
+  loadPanels();
+  loadUsers();
+  loadRingGroups();
+  loadSpeedDials();
+  loadTrunks();
+  loadEvents();
+}
+
+function switchTab(name) {
+  ['panels', 'users', 'perms', 'ringgroups', 'speeddials', 'trunks', 'events', 'callrecords'].forEach(t => {
+    document.getElementById('tab-' + t).style.display = (t === name) ? 'block' : 'none';
+    document.getElementById('tab-btn-' + t).classList.toggle('active', t === name);
+  });
+  if (name === 'callrecords') loadCallRecords();
+}
+
+function badge(text, cls) {
+  return '<span class="badge ' + cls + '">' + text + '</span>';
+}
+
+function loadPanels() {
+  api('/api/panels').then(list => {
+    list = list || [];
+    const tbody = document.getElementById('panels-tbody');
+    tbody.innerHTML = list.map(p => (
+      '<tr><td>' + p.id + '</td><td>' + esc(p.panel_code) + '</td><td>' + esc(p.display_name) +
+      '</td><td>' + esc(p.location) + '</td><td>' + esc(p.device_type || 'PANEL') +
+      '</td><td>' + badge(p.enabled ? 'aktif' : 'kapalı', p.enabled ? 'on' : 'off') + '</td></tr>'
+    )).join('') || '<tr><td colspan="6" style="color:var(--muted)">Henüz panel/cihaz yok.</td></tr>';
+
+    const opts = list.map(p => '<option value="' + esc(p.panel_code) + '">' + esc(p.panel_code) + ' - ' + esc(p.display_name) + '</option>').join('');
+    const sel = document.getElementById('perm-panel');
+    if (sel) sel.innerHTML = opts;
+    loadCurrentPermission(); // seçim listesi ilk dolduğunda da gerçek yetkiyi göster
+  }).catch(e => {
+    document.getElementById('panels-tbody').innerHTML = '<tr><td colspan="6" style="color:var(--danger)">Yüklenemedi: ' + esc(e.message) + '</td></tr>';
+  });
+}
+
+function loadRingGroups() {
+  api('/api/ring-groups').then(list => {
+    list = list || [];
+    const tbody = document.getElementById('ringgroups-tbody');
+    tbody.innerHTML = list.map(g => (
+      '<tr><td>' + g.id + '</td><td>' + esc(g.group_code) + '</td><td>' + esc(g.display_name) +
+      '</td><td>' + esc(g.strategy) + '</td><td>' + g.timeout_sec + '</td><td>' +
+      esc((g.members || []).map(m => m.type + ':' + m.code).join(', ')) + '</td></tr>'
+    )).join('') || '<tr><td colspan="6" style="color:var(--muted)">Henüz çatal arama tanımı yok.</td></tr>';
+  }).catch(e => {
+    document.getElementById('ringgroups-tbody').innerHTML = '<tr><td colspan="6" style="color:var(--danger)">Yüklenemedi: ' + esc(e.message) + '</td></tr>';
+  });
+}
+
+function loadSpeedDials() {
+  api('/api/speed-dials').then(list => {
+    list = list || [];
+    const tbody = document.getElementById('speeddials-tbody');
+    tbody.innerHTML = list.map(s => (
+      '<tr><td>' + s.id + '</td><td>' + esc(s.username) + '</td><td>' + esc(s.label) +
+      '</td><td>' + esc(s.target_type) + '</td><td>' + esc(s.target_value) + '</td><td>' + s.position + '</td></tr>'
+    )).join('') || '<tr><td colspan="6" style="color:var(--muted)">Henüz kısayol yok.</td></tr>';
+  }).catch(e => {
+    document.getElementById('speeddials-tbody').innerHTML = '<tr><td colspan="6" style="color:var(--danger)">Yüklenemedi: ' + esc(e.message) + '</td></tr>';
+  });
+}
+
+function loadTrunks() {
+  api('/api/iax-trunks').then(list => {
+    list = list || [];
+    const tbody = document.getElementById('trunks-tbody');
+    tbody.innerHTML = list.map(t => (
+      '<tr><td>' + t.id + '</td><td>' + esc(t.trunk_name) + '</td><td>' + esc(t.remote_host) +
+      '</td><td>' + t.remote_port + '</td><td>' + esc(t.prefix) + '</td><td>' + badge(t.enabled ? 'aktif' : 'kapalı', t.enabled ? 'on' : 'off') + '</td></tr>'
+    )).join('') || '<tr><td colspan="6" style="color:var(--muted)">Henüz trunk yok.</td></tr>';
+  }).catch(e => {
+    document.getElementById('trunks-tbody').innerHTML = '<tr><td colspan="6" style="color:var(--danger)">Yüklenemedi: ' + esc(e.message) + '</td></tr>';
+  });
+}
+
+function loadEvents() {
+  api('/api/events?limit=200').then(list => {
+    list = list || [];
+    const tbody = document.getElementById('events-tbody');
+    tbody.innerHTML = list.map(e => (
+      '<tr><td>' + esc(e.ts) + '</td><td>' + esc(e.event_type) + '</td><td>' + esc(e.panel_code) +
+      '</td><td>' + esc(e.username) + '</td><td>' + esc(e.peer) + '</td><td>' + (e.duration_s || '') + '</td></tr>'
+    )).join('') || '<tr><td colspan="6" style="color:var(--muted)">Henüz olay kaydı yok.</td></tr>';
+  }).catch(e => {
+    document.getElementById('events-tbody').innerHTML = '<tr><td colspan="6" style="color:var(--danger)">Yüklenemedi: ' + esc(e.message) + '</td></tr>';
+  });
+}
+
+function fmtParty(panel, name, user) {
+  // "1005 (Astsubay) — Ahmet"  şeklinde; eksik alanları atla.
+  var s = esc(panel || '?');
+  if (name) s += ' (' + esc(name) + ')';
+  if (user) s += ' — ' + esc(user);
+  else s += ' — <span style="color:var(--muted)">(oturum yok)</span>';
+  return s;
+}
+
+function loadCallRecords() {
+  api('/api/call-records?limit=200').then(list => {
+    list = list || [];
+    const tbody = document.getElementById('callrecords-tbody');
+    tbody.innerHTML = list.map(c => {
+      var sonuc;
+      if (c.to_voicemail) sonuc = badge('→ Sesli Mesaj', 'off');
+      else if (c.disposition === 'ANSWERED') sonuc = badge('Cevaplandı', 'on');
+      else sonuc = badge(esc(c.disposition || 'Cevapsız'), 'off');
+      return '<tr><td>' + esc(c.start) + '</td><td>' + fmtParty(c.src_panel, c.src_panel_name, c.src_user) +
+        '</td><td>' + fmtParty(c.dst_panel, c.dst_panel_name, c.dst_user) +
+        '</td><td>' + sonuc + '</td><td>' + (c.billsec_s || 0) + '</td></tr>';
+    }).join('') || '<tr><td colspan="5" style="color:var(--muted)">Henüz arama kaydı yok.</td></tr>';
+  }).catch(e => {
+    document.getElementById('callrecords-tbody').innerHTML = '<tr><td colspan="5" style="color:var(--danger)">Yüklenemedi: ' + esc(e.message) + '</td></tr>';
+  });
+}
+
+function createRingGroup() {
+  const group_code = document.getElementById('nrg-code').value.trim();
+  const display_name = document.getElementById('nrg-name').value.trim();
+  const timeout_sec = parseInt(document.getElementById('nrg-timeout').value, 10) || 30;
+  const raw = document.getElementById('nrg-members').value.split(',').map(s => s.trim()).filter(Boolean);
+  const msg = document.getElementById('nrg-msg');
+  msg.className = 'msg'; msg.textContent = '';
+  const members = [];
+  for (const tok of raw) {
+    const idx = tok.indexOf(':');
+    if (idx < 0) { msg.className = 'msg err'; msg.textContent = 'Geçersiz üye biçimi: "' + tok + '" (TİP:kod olmalı, örn. USER:komutan)'; return; }
+    members.push({ type: tok.slice(0, idx).trim().toUpperCase(), code: tok.slice(idx + 1).trim() });
+  }
+  if (!group_code || members.length < 2) { msg.className = 'msg err'; msg.textContent = 'Grup kodu ve en az 2 üye gerekli.'; return; }
+  api('/api/ring-groups', {
+    method: 'POST',
+    body: JSON.stringify({ group_code, display_name, timeout_sec, members })
+  }).then(() => {
+    msg.className = 'msg ok'; msg.textContent = 'Çatal arama oluşturuldu.';
+    document.getElementById('nrg-code').value = '';
+    document.getElementById('nrg-name').value = '';
+    document.getElementById('nrg-members').value = '';
+    loadRingGroups();
+  }).catch(e => {
+    msg.className = 'msg err'; msg.textContent = 'Hata: ' + e.message;
+  });
+}
+
+function createSpeedDial() {
+  const username = document.getElementById('nsd-panel').value;
+  const label = document.getElementById('nsd-label').value.trim();
+  const target_type = document.getElementById('nsd-target-type').value;
+  const target_value = document.getElementById('nsd-target-value').value.trim();
+  const position = parseInt(document.getElementById('nsd-position').value, 10) || 0;
+  const color_hint = document.getElementById('nsd-color').value.trim();
+  const msg = document.getElementById('nsd-msg');
+  msg.className = 'msg'; msg.textContent = '';
+  if (!username || !label || !target_value) { msg.className = 'msg err'; msg.textContent = 'Kullanıcı, etiket ve hedef değer zorunlu.'; return; }
+  api('/api/speed-dials', {
+    method: 'POST',
+    body: JSON.stringify({ username, label, target_type, target_value, position, color_hint })
+  }).then(() => {
+    msg.className = 'msg ok'; msg.textContent = 'Kısayol oluşturuldu.';
+    document.getElementById('nsd-label').value = '';
+    document.getElementById('nsd-target-value').value = '';
+    loadSpeedDials();
+  }).catch(e => {
+    msg.className = 'msg err'; msg.textContent = 'Hata: ' + e.message;
+  });
+}
+
+function createTrunk() {
+  const trunk_name = document.getElementById('ntr-name').value.trim();
+  const remote_host = document.getElementById('ntr-host').value.trim();
+  const remote_port = parseInt(document.getElementById('ntr-port').value, 10) || 4569;
+  const secret = document.getElementById('ntr-secret').value;
+  const prefix = document.getElementById('ntr-prefix').value.trim();
+  const msg = document.getElementById('ntr-msg');
+  msg.className = 'msg'; msg.textContent = '';
+  if (!trunk_name || !remote_host || !secret || !prefix) { msg.className = 'msg err'; msg.textContent = 'Tüm alanlar zorunlu.'; return; }
+  api('/api/iax-trunks', {
+    method: 'POST',
+    body: JSON.stringify({ trunk_name, remote_host, remote_port, secret, prefix })
+  }).then(() => {
+    msg.className = 'msg ok'; msg.textContent = 'Trunk oluşturuldu.';
+    document.getElementById('ntr-name').value = '';
+    document.getElementById('ntr-host').value = '';
+    document.getElementById('ntr-secret').value = '';
+    document.getElementById('ntr-prefix').value = '';
+    loadTrunks();
+  }).catch(e => {
+    msg.className = 'msg err'; msg.textContent = 'Hata: ' + e.message;
+  });
+}
+
+let usersById = {}; // Düzenle formunu prefill etmek için son yüklenen listeyi id'ye göre saklıyoruz
+
+function loadUsers() {
+  api('/api/users').then(list => {
+    list = list || [];
+    usersById = {};
+    list.forEach(u => { usersById[u.id] = u; });
+    const tbody = document.getElementById('users-tbody');
+    tbody.innerHTML = list.map(u => (
+      '<tr><td>' + u.id + '</td><td>' + esc(u.username) + '</td><td>' + esc(u.full_name) +
+      '</td><td>' + badge(u.role, 'role-' + u.role) + '</td><td>' + badge(u.enabled ? 'aktif' : 'kapalı', u.enabled ? 'on' : 'off') +
+      '</td><td>' + (u.has_sip_account ? badge(esc(u.sip_username), 'on') : badge('yok', 'off')) +
+      '</td><td><button onclick="openUserEdit(' + u.id + ')">Düzenle</button> ' +
+      '<button class="danger" onclick="deleteUser(' + u.id + ', \'' + esc(u.username).replace(/'/g, "\\'") + '\')">Sil</button></td></tr>'
+    )).join('') || '<tr><td colspan="7" style="color:var(--muted)">Henüz kullanıcı yok.</td></tr>';
+
+    const opts = list.map(u => '<option value="' + esc(u.username) + '">' + esc(u.username) + ' (' + esc(u.role) + ')</option>').join('');
+    const sel = document.getElementById('perm-user');
+    if (sel) sel.innerHTML = opts;
+    const sel2 = document.getElementById('nsd-panel');
+    if (sel2) sel2.innerHTML = opts;
+    const sel3 = document.getElementById('usip-user');
+    if (sel3) sel3.innerHTML = opts;
+    loadCurrentPermission(); // seçim listesi ilk dolduğunda da gerçek yetkiyi göster
+  }).catch(e => {
+    document.getElementById('users-tbody').innerHTML = '<tr><td colspan="6" style="color:var(--danger)">Yüklenemedi: ' + esc(e.message) + '</td></tr>';
+  });
+}
+
+function setUserSip() {
+  const username = document.getElementById('usip-user').value;
+  const sip_username = document.getElementById('usip-sipuser').value.trim();
+  const sip_password = document.getElementById('usip-sippass').value;
+  const msg = document.getElementById('usip-msg');
+  msg.className = 'msg'; msg.textContent = '';
+  if (!username || !sip_username || !sip_password) { msg.className = 'msg err'; msg.textContent = 'Kullanıcı, SIP kullanıcı adı ve şifre zorunlu.'; return; }
+  api('/api/users/sip', {
+    method: 'POST',
+    body: JSON.stringify({ username, sip_username, sip_password })
+  }).then(() => {
+    msg.className = 'msg ok'; msg.textContent = 'SIP hesabı kaydedildi.';
+    document.getElementById('usip-sipuser').value = '';
+    document.getElementById('usip-sippass').value = '';
+    loadUsers();
+  }).catch(e => {
+    msg.className = 'msg err'; msg.textContent = 'Hata: ' + e.message;
+  });
+}
+
+function createPanel() {
+  const code = document.getElementById('np-code').value.trim();
+  const name = document.getElementById('np-name').value.trim();
+  const loc = document.getElementById('np-loc').value.trim();
+  const device_type = document.getElementById('np-devtype').value;
+  const msg = document.getElementById('np-msg');
+  msg.className = 'msg'; msg.textContent = '';
+  if (!code) { msg.className = 'msg err'; msg.textContent = 'Kod zorunlu.'; return; }
+  api('/api/panels', {
+    method: 'POST',
+    body: JSON.stringify({ panel_code: code, display_name: name, location: loc, device_type })
+  }).then((resp) => {
+    msg.className = 'msg ok';
+    msg.textContent = (resp && resp.warning) ? ('Oluşturuldu (uyarı: ' + resp.warning + ')') : 'Oluşturuldu.';
+    document.getElementById('np-code').value = '';
+    document.getElementById('np-name').value = '';
+    document.getElementById('np-loc').value = '';
+    loadPanels();
+  }).catch(e => {
+    msg.className = 'msg err'; msg.textContent = 'Hata: ' + e.message;
+  });
+}
+
+function syncPanels() {
+  const msg = document.getElementById('sync-msg');
+  msg.className = 'msg'; msg.textContent = 'Senkronlanıyor...';
+  api('/api/panels/sync', { method: 'POST' }).then((r) => {
+    msg.className = 'msg ok';
+    msg.textContent = 'Tamam: ' + (r.total || 0) + ' panelden ' + (r.provisioned || 0) + ' tanesi yeni hazırlandı.';
+  }).catch(e => {
+    msg.className = 'msg err'; msg.textContent = 'Hata: ' + e.message;
+  });
+}
+
+function createUser() {
+  const username = document.getElementById('nu-username').value.trim();
+  const fullname = document.getElementById('nu-fullname').value.trim();
+  const password = document.getElementById('nu-password').value;
+  const role = document.getElementById('nu-role').value;
+  const msg = document.getElementById('nu-msg');
+  msg.className = 'msg'; msg.textContent = '';
+  if (!username || !password) { msg.className = 'msg err'; msg.textContent = 'Kullanıcı adı ve şifre zorunlu.'; return; }
+  api('/api/users', {
+    method: 'POST',
+    body: JSON.stringify({ username, password, full_name: fullname, role })
+  }).then(() => {
+    msg.className = 'msg ok'; msg.textContent = 'Kullanıcı oluşturuldu.';
+    document.getElementById('nu-username').value = '';
+    document.getElementById('nu-fullname').value = '';
+    document.getElementById('nu-password').value = '';
+    loadUsers();
+  }).catch(e => {
+    msg.className = 'msg err'; msg.textContent = 'Hata: ' + e.message;
+  });
+}
+
+// loadCurrentPermission: perm-user / perm-panel seçimi değiştiğinde bu
+// çiftin DB'deki GERÇEK yetkisini okuyup checkbox'lara yansıtır (2026-07-22
+// düzeltmesi — bkz. yukarıdaki "hint" notu).
+function loadCurrentPermission() {
+  const username = document.getElementById('perm-user').value;
+  const panel_code = document.getElementById('perm-panel').value;
+  if (!username || !panel_code) return;
+  api('/api/permissions?username=' + encodeURIComponent(username) + '&panel_code=' + encodeURIComponent(panel_code))
+    .then(p => {
+      document.getElementById('perm-login').checked = !!p.can_login;
+      document.getElementById('perm-call').checked = !!p.can_call;
+      document.getElementById('perm-anons').checked = !!p.can_anons;
+      document.getElementById('perm-config').checked = !!p.can_config;
+    })
+    .catch(() => {
+      // okunamadıysa (ör. henüz hiç atama yok) hepsi false görünsün
+      document.getElementById('perm-login').checked = false;
+      document.getElementById('perm-call').checked = false;
+      document.getElementById('perm-anons').checked = false;
+      document.getElementById('perm-config').checked = false;
+    });
+}
+
+function openUserEdit(id) {
+  const u = usersById[id];
+  if (!u) return;
+  document.getElementById('eu-id').value = u.id;
+  document.getElementById('eu-username-label').textContent = u.username;
+  document.getElementById('eu-fullname').value = u.full_name || '';
+  document.getElementById('eu-role').value = u.role;
+  document.getElementById('eu-password').value = '';
+  document.getElementById('eu-enabled').checked = !!u.enabled;
+  document.getElementById('eu-msg').textContent = '';
+  document.getElementById('edit-user-card').style.display = 'block';
+  document.getElementById('edit-user-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function closeUserEdit() {
+  document.getElementById('edit-user-card').style.display = 'none';
+}
+
+function saveUserEdit() {
+  const id = document.getElementById('eu-id').value;
+  const full_name = document.getElementById('eu-fullname').value.trim();
+  const role = document.getElementById('eu-role').value;
+  const password = document.getElementById('eu-password').value;
+  const enabled = document.getElementById('eu-enabled').checked;
+  const msg = document.getElementById('eu-msg');
+  msg.className = 'msg'; msg.textContent = '';
+  const body = { full_name, role, enabled };
+  if (password) body.password = password;
+  api('/api/users?id=' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify(body) })
+    .then(() => {
+      msg.className = 'msg ok'; msg.textContent = 'Güncellendi.';
+      loadUsers();
+      setTimeout(closeUserEdit, 600);
+    })
+    .catch(e => { msg.className = 'msg err'; msg.textContent = 'Hata: ' + e.message; });
+}
+
+function deleteUser(id, username) {
+  if (!confirm('"' + username + '" kullanıcısını KALICI olarak silmek istediğine emin misin? Bu geri alınamaz (SIP hesabı, yetkileri ve aktif oturumu da silinir).')) return;
+  api('/api/users?id=' + encodeURIComponent(id), { method: 'DELETE' })
+    .then(() => { loadUsers(); })
+    .catch(e => alert('Silinemedi: ' + e.message));
+}
+
+function assignPermission() {
+  const username = document.getElementById('perm-user').value;
+  const panel_code = document.getElementById('perm-panel').value;
+  const can_login = document.getElementById('perm-login').checked;
+  const can_call = document.getElementById('perm-call').checked;
+  const can_anons = document.getElementById('perm-anons').checked;
+  const can_config = document.getElementById('perm-config').checked;
+  const msg = document.getElementById('perm-msg');
+  msg.className = 'msg'; msg.textContent = '';
+  if (!username || !panel_code) { msg.className = 'msg err'; msg.textContent = 'Önce kullanıcı ve panel oluşturulmuş olmalı.'; return; }
+  api('/api/permissions', {
+    method: 'POST',
+    body: JSON.stringify({ username, panel_code, can_login, can_call, can_anons, can_config })
+  }).then(() => {
+    msg.className = 'msg ok'; msg.textContent = 'Yetki kaydedildi.';
+  }).catch(e => {
+    msg.className = 'msg err'; msg.textContent = 'Hata: ' + e.message;
+  });
+}
+
+function esc(s) {
+  if (s === undefined || s === null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Sayfa yüklenince: token varsa direkt uygulamaya geç, yoksa login ekranında kal.
+if (TOKEN) {
+  showApp();
+}
+</script>
+
+</body>
+</html>
