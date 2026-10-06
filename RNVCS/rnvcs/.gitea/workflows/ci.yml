@@ -1,0 +1,92 @@
+name: CI (lint + unit test + migration testi)
+
+# Her push'ta ve main'e açılan her PR'da otomatik çalışır.
+# Amaç: kod main'e girmeden ÖNCE en ucuz/en hızlı kontrolleri yapmak.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest   # rnvcs-ci01'e kayıtlı self-hosted runner bunu karşılar (act_runner etiketi)
+    steps:
+      - name: Kodu çek
+        uses: actions/checkout@v4
+
+      - name: Go kur
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: true
+
+      - name: gofmt kontrolü (core)
+        run: |
+          cd core
+          test -z "$(gofmt -l .)" || (echo 'gofmt sorunlu dosyalar var, `gofmt -w .` çalıştırın:' && gofmt -l . && exit 1)
+
+      - name: gofmt kontrolü (panel-backend)
+        run: |
+          cd panel-backend
+          test -z "$(gofmt -l .)" || (echo 'gofmt sorunlu dosyalar var, `gofmt -w .` çalıştırın:' && gofmt -l . && exit 1)
+
+      - name: go vet (core)
+        run: cd core && go vet ./...
+
+      - name: go vet (panel-backend)
+        run: cd panel-backend && go vet ./...
+
+      - name: Birim testler (core)
+        run: cd core && go test ./... -race -v
+
+      - name: Birim testler (panel-backend)
+        run: cd panel-backend && go test ./... -race -v
+
+  migration-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rnvcs
+          POSTGRES_PASSWORD: rnvcs_test_only
+          POSTGRES_DB: rnvcs_ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rnvcs"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Kodu çek
+        uses: actions/checkout@v4
+
+      - name: psql kur
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client
+
+      - name: Migration'ları BİRİNCİ kez uygula
+        env:
+          PGPASSWORD: rnvcs_test_only
+        run: |
+          for f in migrations/*.sql; do
+            echo "=== Uygulanıyor (1. tur): $f ==="
+            psql -h postgres -U rnvcs -d rnvcs_ci_test -f "$f"
+          done
+
+      - name: Migration'ları İKİNCİ kez uygula (idempotency kanıtı)
+        env:
+          PGPASSWORD: rnvcs_test_only
+        run: |
+          for f in migrations/*.sql; do
+            echo "=== Uygulanıyor (2. tur — hata VERMEMELİ): $f ==="
+            psql -h postgres -U rnvcs -d rnvcs_ci_test -f "$f"
+          done
+
+      - name: Şema özetini yazdır (görsel doğrulama için)
+        env:
+          PGPASSWORD: rnvcs_test_only
+        run: psql -h postgres -U rnvcs -d rnvcs_ci_test -c '\dt'
