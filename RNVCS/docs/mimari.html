@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RNVCS Mimari</title>
+<meta name="description" content="RNVCS sesli haberleşme sistemi — mimari ve çalışma prensibi, görsel kılavuz.">
+<style>
+  :root{
+    --bg:#f6f7f9; --surface:#ffffff; --surface2:#eef1f5; --border:#d8dee6;
+    --text:#1a2230; --muted:#5a6678; --faint:#8a94a6;
+    --accent:#2563eb; --accent-soft:#e8f0fe;
+    --green:#15803d; --green-soft:#e3f5ea;
+    --amber:#b45309; --amber-soft:#fdf0dd;
+    --red:#b91c1c; --red-soft:#fbe4e4;
+    --purple:#6d28d9; --purple-soft:#efe8fd;
+    --code-bg:#f0f2f5; --shadow:0 1px 2px rgba(16,24,40,.06),0 2px 8px rgba(16,24,40,.05);
+    --mono:"SFMono-Regular",ui-monospace,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  :root:not([data-theme="light"]){
+    @media (prefers-color-scheme:dark){
+      --bg:#0e1420; --surface:#161d2b; --surface2:#1d2636; --border:#2b3545;
+      --text:#e6ebf2; --muted:#9aa6b8; --faint:#6b7689;
+      --accent:#5b9bff; --accent-soft:#17283f;
+      --green:#4ade80; --green-soft:#12271a;
+      --amber:#fbbf24; --amber-soft:#2c220f;
+      --red:#f87171; --red-soft:#2c1515;
+      --purple:#c4b5fd; --purple-soft:#211a33;
+      --code-bg:#0d1626; --shadow:0 1px 2px rgba(0,0,0,.3),0 2px 10px rgba(0,0,0,.25);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0e1420; --surface:#161d2b; --surface2:#1d2636; --border:#2b3545;
+    --text:#e6ebf2; --muted:#9aa6b8; --faint:#6b7689;
+    --accent:#5b9bff; --accent-soft:#17283f;
+    --green:#4ade80; --green-soft:#12271a;
+    --amber:#fbbf24; --amber-soft:#2c220f;
+    --red:#f87171; --red-soft:#2c1515;
+    --purple:#c4b5fd; --purple-soft:#211a33;
+    --code-bg:#0d1626; --shadow:0 1px 2px rgba(0,0,0,.3),0 2px 10px rgba(0,0,0,.25);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+    line-height:1.6;font-size:16px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 16px}
+  code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);
+    padding:.12em .4em;border-radius:5px;border:1px solid var(--border)}
+  pre{font-family:var(--mono);font-size:13px;line-height:1.5;background:var(--code-bg);
+    border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow:auto}
+  pre code{background:none;border:none;padding:0}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* header */
+  header.hero{background:linear-gradient(135deg,var(--accent-soft),var(--surface));
+    border-bottom:1px solid var(--border);padding:40px 0 30px}
+  .hero h1{margin:0 0 6px;font-size:30px;letter-spacing:-.5px}
+  .hero .sub{color:var(--muted);font-size:16px;max-width:70ch}
+  .hero .meta{margin-top:16px;display:flex;gap:8px;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;
+    padding:4px 11px;border-radius:999px;background:var(--surface);border:1px solid var(--border);color:var(--muted)}
+  .chip.ok{background:var(--green-soft);color:var(--green);border-color:transparent}
+
+  /* theme toggle */
+  .toggle{position:fixed;top:14px;right:14px;z-index:20;background:var(--surface);
+    border:1px solid var(--border);color:var(--text);border-radius:999px;padding:7px 13px;
+    font-size:13px;cursor:pointer;box-shadow:var(--shadow);font-family:var(--sans)}
+
+  /* TOC */
+  nav.toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:14px 18px;margin:26px 0;box-shadow:var(--shadow)}
+  nav.toc strong{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--faint)}
+  nav.toc ol{margin:8px 0 0;padding-left:20px;columns:2;column-gap:26px}
+  @media(max-width:620px){nav.toc ol{columns:1}}
+  nav.toc li{margin:3px 0}
+
+  section{margin:34px 0}
+  h2{font-size:22px;margin:0 0 4px;padding-top:10px;letter-spacing:-.3px;
+    display:flex;align-items:center;gap:10px}
+  h2 .num{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;
+    font-size:14px;background:var(--accent);color:#fff;border-radius:8px;font-weight:700;flex:none}
+  h3{font-size:16.5px;margin:22px 0 6px;color:var(--text)}
+  .lead{color:var(--muted);margin:0 0 14px}
+
+  /* cards */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:16px 0}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:16px 18px;box-shadow:var(--shadow)}
+  .card h4{margin:0 0 4px;font-size:15px;display:flex;align-items:center;gap:8px}
+  .card .tag{font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;
+    background:var(--surface2);color:var(--muted)}
+  .card p{margin:6px 0 0;font-size:13.5px;color:var(--muted)}
+  .card .port{font-family:var(--mono);font-size:12px;color:var(--accent)}
+
+  /* tables */
+  .tbl{overflow:auto;border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);margin:14px 0}
+  table{border-collapse:collapse;width:100%;font-size:13.5px;background:var(--surface)}
+  th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{background:var(--surface2);font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;
+    color:var(--faint);font-weight:700;position:sticky;top:0}
+  tr:last-child td{border-bottom:none}
+  td code{white-space:nowrap}
+
+  /* callouts */
+  .note{border-left:4px solid var(--accent);background:var(--accent-soft);
+    border-radius:0 10px 10px 0;padding:12px 16px;margin:14px 0;font-size:14px}
+  .note.warn{border-color:var(--amber);background:var(--amber-soft)}
+  .note.danger{border-color:var(--red);background:var(--red-soft)}
+  .note b{color:var(--text)}
+  .note .lbl{font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:3px}
+
+  /* principle list */
+  .principles{display:grid;gap:12px;margin:14px 0}
+  .pr{display:flex;gap:13px;align-items:flex-start;background:var(--surface);
+    border:1px solid var(--border);border-radius:11px;padding:14px 16px;box-shadow:var(--shadow)}
+  .pr .ic{font-size:20px;flex:none;line-height:1.3}
+  .pr b{display:block;margin-bottom:2px}
+  .pr span{color:var(--muted);font-size:13.5px}
+
+  /* flow */
+  .flow{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:4px 6px;margin:14px 0;box-shadow:var(--shadow)}
+  .flow .step{display:flex;gap:12px;padding:11px 12px;border-bottom:1px solid var(--border)}
+  .flow .step:last-child{border-bottom:none}
+  .flow .who{flex:none;width:112px;font-family:var(--mono);font-size:11.5px;font-weight:700;
+    padding:2px 0;color:var(--accent)}
+  .flow .who.c2{color:var(--purple)}
+  .flow .who.c3{color:var(--green)}
+  .flow .act{font-size:13.5px;color:var(--text)}
+  .flow .act .m{font-family:var(--mono);font-size:12px;color:var(--muted)}
+
+  /* svg diagram */
+  .diagram{background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    padding:10px;margin:16px 0;box-shadow:var(--shadow);overflow:auto}
+  .diagram svg{display:block;width:100%;height:auto;min-width:640px}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);
+    padding:8px 6px 2px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend i{width:22px;height:0;border-top:2px solid;display:inline-block}
+
+  .footer{border-top:1px solid var(--border);margin-top:40px;padding:22px 0 50px;
+    color:var(--faint);font-size:13px}
+  details{background:var(--surface);border:1px solid var(--border);border-radius:11px;
+    padding:4px 16px;margin:12px 0;box-shadow:var(--shadow)}
+  summary{cursor:pointer;font-weight:600;padding:10px 0}
+  .pill{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:5px;
+    background:var(--surface2);border:1px solid var(--border);color:var(--muted);white-space:nowrap}
+</style>
+</head>
+<body>
+<button class="toggle" id="themeBtn" aria-label="Temayı değiştir">🌓 Tema</button>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>RNVCS — Mimari &amp; Çalışma Prensibi</h1>
+    <p class="sub">Asterisk tabanlı sesli haberleşme sistemi. Bu sayfa, repodaki tüm kaynak kodun
+      satır satır incelenmesiyle hazırlandı — "bu sistem ne yapıyor, parçalar nasıl bağlı, bir istek
+      nereden girip nereye çıkıyor" sorularının görsel cevabı.</p>
+    <div class="meta">
+      <span class="chip">📅 2026-10-06</span>
+      <span class="chip">📦 72 dosya incelendi</span>
+      <span class="chip ok">✓ build / vet / test temiz</span>
+      <span class="chip">Go 1.24.7</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<nav class="toc">
+  <strong>İçindekiler</strong>
+  <ol>
+    <li><a href="#ne">Sistem ne yapar?</a></li>
+    <li><a href="#topoloji">Topoloji (şema)</a></li>
+    <li><a href="#ilkeler">4 temel tasarım kararı</a></li>
+    <li><a href="#core">core — Yönetim Servisi</a></li>
+    <li><a href="#roller">Roller &amp; yetki</a></li>
+    <li><a href="#akislar">Kritik akışlar</a></li>
+    <li><a href="#panelbackend">panel-backend</a></li>
+    <li><a href="#panelapp">panel-app</a></li>
+    <li><a href="#veri">Veri modeli</a></li>
+    <li><a href="#kurulum">Kurulum &amp; dağıtım</a></li>
+    <li><a href="#surum">Sürüm durumu</a></li>
+  </ol>
+</nav>
+
+<section id="ne">
+  <h2><span class="num">1</span> Sistem ne yapar?</h2>
+  <p class="lead">Sahadaki dokunmatik "muhabere panelleri", bir merkez sunucu (CORE) üzerinden birbirini
+    arar; çatal arama, konferans, sesli mesaj yapar. INTERKOM ve IP Horn cihazları da aynı sisteme bağlanır.
+    Yöneticiler kullanıcı/panel/yetki tanımlarını bir web arayüzünden (Bakım/Kontrol Terminali) yapar.</p>
+  <p class="lead">Üç yazılım bileşeni var:</p>
+  <div class="cards">
+    <div class="card">
+      <h4>🖥️ core <span class="tag">Go</span></h4>
+      <div class="port">:8091 · CORE sunucusunda</div>
+      <p>REST API + web yönetim arayüzü. PostgreSQL'deki tanımları Asterisk config dosyalarına
+        yansıtır, login/oturum yönetir. İkili adı: <code>rnvcs-yonetim-servisi</code>.</p>
+    </div>
+    <div class="card">
+      <h4>📞 panel-backend <span class="tag">Go</span></h4>
+      <div class="port">:8090 · her panel cihazında</div>
+      <p>Panelin yerel "telefon motoru": gerçek SIP user agent (REGISTER/INVITE/BYE), RTP/G.711 ses
+        köprüsü (arecord/aplay), ses seviyesi, ses aygıtı keşfi.</p>
+    </div>
+    <div class="card">
+      <h4>🪟 panel-app <span class="tag">HTML/JS</span></h4>
+      <div class="port">kiosk tarayıcı · tek dosya</div>
+      <p>Operatör arayüzü: login, dialpad, hızlı arama, gelen/aktif çağrı, konferans, sesli mesaj,
+        "Sayfam" kutuları. TR / AZ / EN.</p>
+    </div>
+  </div>
+  <p class="lead">Destekleyici parçalar: <code>migrations/</code> (PostgreSQL şeması),
+    <code>scripts/</code> (kurulum/deploy/rollback/smoke test), <code>infra/systemd/</code>,
+    <code>.gitea/workflows/</code> (CI/CD), <code>docs/</code>.</p>
+</section>
+
+<section id="topoloji">
+  <h2><span class="num">2</span> Topoloji</h2>
+  <p class="lead">Kaba hatlarıyla: panel cihazı iki şeyle konuşur — yerel backend'i (ses/çağrı) ve merkezî
+    CORE (giriş, kısayol, sesli mesaj). CORE da PostgreSQL ve Asterisk'i sürer.</p>
+  <div class="diagram">
+    <svg viewBox="0 0 860 430" role="img" aria-label="RNVCS topoloji şeması">
+      <defs>
+        <marker id="arr" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 Z" fill="var(--muted)"/>
+        </marker>
+        <marker id="arrA" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 Z" fill="var(--accent)"/>
+        </marker>
+        <marker id="arrG" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L7,3 L0,6 Z" fill="var(--green)"/>
+        </marker>
+      </defs>
+      <style>
+        .box{fill:var(--surface);stroke:var(--border);stroke-width:1.5;rx:10}
+        .boxlbl{fill:var(--text);font:600 13px var(--sans)}
+        .boxsub{fill:var(--muted);font:11px var(--mono)}
+        .zone{fill:none;stroke:var(--border);stroke-width:1.5;stroke-dasharray:5 4;rx:14}
+        .zlbl{fill:var(--faint);font:600 11px var(--sans);text-transform:uppercase}
+        .ln{stroke:var(--muted);stroke-width:1.6;fill:none}
+        .lnA{stroke:var(--accent);stroke-width:1.8;fill:none}
+        .lnG{stroke:var(--green);stroke-width:1.8;fill:none}
+        .elbl{font:11px var(--sans);fill:var(--muted)}
+      </style>
+
+      <!-- panel zone -->
+      <rect class="zone" x="8" y="60" width="210" height="250"/>
+      <text class="zlbl" x="20" y="52">Panel cihazı (15.2.4.201)</text>
+      <rect class="box" x="30" y="80" width="166" height="46" rx="10"/>
+      <text class="boxlbl" x="42" y="100">🪟 panel_app.html</text>
+      <text class="boxsub" x="42" y="116">kiosk tarayıcı</text>
+      <rect class="box" x="30" y="210" width="166" height="60" rx="10"/>
+      <text class="boxlbl" x="42" y="232">📞 panel-backend</text>
+      <text class="boxsub" x="42" y="248">SIP UA + RTP</text>
+      <text class="boxsub" x="42" y="262">arecord/aplay · wpctl</text>
+      <!-- app<->backend -->
+      <path class="ln" d="M113,126 L113,210" marker-end="url(#arr)"/>
+      <text class="elbl" x="120" y="172">:8090</text>
+
+      <!-- core zone -->
+      <rect class="zone" x="300" y="30" width="540" height="370"/>
+      <text class="zlbl" x="312" y="22">CORE sunucusu (üretim 15.2.4.10 / yedek .11)</text>
+
+      <rect class="box" x="330" y="120" width="190" height="86" rx="10"/>
+      <text class="boxlbl" x="344" y="142">🖥️ rnvcs-yonetim-servisi</text>
+      <text class="boxsub" x="344" y="160">Go · root · :8091</text>
+      <text class="boxsub" x="344" y="176">/api/* + BKT</text>
+      <text class="boxsub" x="344" y="192">writers: pjsip/dialplan…</text>
+
+      <rect class="box" x="620" y="60" width="180" height="50" rx="10"/>
+      <text class="boxlbl" x="634" y="82">🗄️ PostgreSQL</text>
+      <text class="boxsub" x="634" y="98">db: rnvcs</text>
+
+      <rect class="box" x="620" y="150" width="180" height="56" rx="10"/>
+      <text class="boxlbl" x="634" y="172">📁 /etc/asterisk/</text>
+      <text class="boxsub" x="634" y="188">*_rnvcs_dynamic.conf</text>
+
+      <rect class="box" x="560" y="250" width="240" height="64" rx="10"/>
+      <text class="boxlbl" x="574" y="272">☎️ Asterisk 22</text>
+      <text class="boxsub" x="574" y="288">PJSIP · IAX2 · ConfBridge</text>
+      <text class="boxsub" x="574" y="303">Voicemail · CDR→ODBC</text>
+
+      <!-- app -> core REST -->
+      <path class="lnA" d="M196,96 C300,96 250,150 330,150" marker-end="url(#arrA)"/>
+      <text class="elbl" x="214" y="90" fill="var(--accent)">HTTP :8091 (REST + BKT)</text>
+
+      <!-- core -> pg -->
+      <path class="ln" d="M520,150 C580,150 575,90 620,86" marker-end="url(#arr)"/>
+      <text class="elbl" x="528" y="120">psql CLI</text>
+      <!-- core -> files -->
+      <path class="ln" d="M520,172 L620,176" marker-end="url(#arr)"/>
+      <text class="elbl" x="528" y="168">dosya yaz</text>
+      <!-- files -> asterisk reload -->
+      <path class="ln" d="M700,206 L690,250" marker-end="url(#arr)"/>
+      <text class="elbl" x="704" y="232">reload</text>
+      <!-- core -> asterisk AMI -->
+      <path class="ln" d="M470,206 C480,240 520,270 560,278" marker-end="url(#arr)"/>
+      <text class="elbl" x="450" y="250">AMI 127.0.0.1:5038</text>
+
+      <!-- backend -> asterisk SIP/RTP -->
+      <path class="lnG" d="M196,250 C400,250 360,290 560,290" marker-end="url(#arrG)"/>
+      <text class="elbl" x="214" y="268" fill="var(--green)">SIP/UDP :5060 + RTP 10000-20000</text>
+    </svg>
+    <div class="legend">
+      <span><i style="border-color:var(--accent)"></i> HTTP / REST</span>
+      <span><i style="border-color:var(--green)"></i> SIP / RTP (ses)</span>
+      <span><i style="border-color:var(--muted)"></i> dahili (DB / dosya / AMI)</span>
+    </div>
+  </div>
+  <div class="note"><span class="lbl">Not</span>
+    INTERKOM / IP Horn cihazları kendi SIP firmware'leriyle doğrudan Asterisk'e bağlanır.
+    <b>Redis kurulu ama hiçbir bileşen kullanmıyor.</b> Uzak sahalarla IAX2 trunk (:4569) tanımlanabiliyor
+    ama dialplan'i henüz yazılmıyor (özellik yarım).</div>
+</section>
+
+<section id="ilkeler">
+  <h2><span class="num">3</span> Dört temel tasarım kararı</h2>
+  <p class="lead">Kodun her yerinde karşınıza çıkan, "neden böyle yapılmış" sorusunun cevabı olan kararlar:</p>
+  <div class="principles">
+    <div class="pr"><div class="ic">🗄️</div><div>
+      <b>Tek gerçek kaynak: PostgreSQL</b>
+      <span>Panel, kullanıcı, SIP hesabı, ring group önce DB'ye yazılır; sonra ilgili Asterisk config
+        dosyasına blok eklenir ve <code>asterisk -rx "… reload"</code> çağrılır. Asterisk realtime
+        kullanılmıyor, dosya üretiliyor.</span></div></div>
+    <div class="pr"><div class="ic">📦</div><div>
+      <b>Sıfır harici Go bağımlılığı</b>
+      <span>İzole ağda Go modül proxy'sine erişim garanti olmadığından iki Go modülü de yalnız stdlib
+        kullanır. Sonuç: DB'ye <code>psql</code> alt süreciyle erişim, elle yazılmış PBKDF2, elle yazılmış
+        AMI / SIP / RTP / G.711 yığını.</span></div></div>
+    <div class="pr"><div class="ic">👤</div><div>
+      <b>SIP kimliği kullanıcıya ait</b>
+      <span>Operatör hangi panelden girerse girsin, backend kendi <code>sip_username/sip_password</code>'üyle
+        REGISTER olur. <code>device_type='PANEL'</code> kayıtları SIP register olmaz — sadece yetki etiketi +
+        sesli mesaj kutusu. INTERKOM/IP_HORN ise gerçek donanım, kendi endpoint'ini alır.</span></div></div>
+    <div class="pr"><div class="ic">🔑</div><div>
+      <b>Oturumlar bellek-içi</b>
+      <span>Bearer token'lar <code>auth.SessionStore</code> map'inde tutulur; servis restart olunca herkes
+        yeniden login olur. 12 saat sabit ömür, kullanıcı başına tek aktif oturum.</span></div></div>
+  </div>
+</section>
+
+<section id="core">
+  <h2><span class="num">4</span> core — Yönetim Servisi</h2>
+  <h3>Başlangıç akışı (<code>core/main.go</code>)</h3>
+  <ol class="lead">
+    <li>Zorunlu env: <code>RNVCS_DB_DSN</code>, <code>RNVCS_PROVISIONING_KEY</code> — yoksa durur.</li>
+    <li>DB bağlantı testi (<code>SELECT 1</code>), açılışta <code>panel_session_history</code> tablosunu
+      <code>IF NOT EXISTS</code> ile yaratır.</li>
+    <li>Alt komut: <code>create-admin &lt;kullanıcı&gt; &lt;şifre&gt;</code> → ilk ADMIN'i yaratıp çıkar.</li>
+    <li>Rotaları bağlar, arka plan konferans izleyicisini (<code>confwatch</code>) başlatır,
+      <code>:8091</code> dinler. <code>/</code> yolunda gömülü Bakım Terminali HTML'i sunulur.</li>
+  </ol>
+  <h3>Paket haritası</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Paket</th><th>Sorumluluk</th></tr></thead>
+    <tbody>
+      <tr><td><code>internal/pg</code></td><td>Her sorgu için bir <code>psql</code> süreci çalıştırır, çıktıyı TAB ile böler. <code>EscapeLiteral</code> tek tırnağı ikiler. <b>Transaction yok.</b></td></tr>
+      <tr><td><code>internal/auth</code></td><td>PBKDF2-HMAC-SHA256 (210k iterasyon, rastgele salt) parola hash'i; bellek-içi oturum deposu.</td></tr>
+      <tr><td><code>internal/api</code></td><td>Tüm HTTP handler'ları: login, users, panels, permissions, ring_groups, speed_dials, sayfam_tiles, iax_trunks, voicemail, call_records, conference, events, panel_config.</td></tr>
+      <tr><td><code>internal/pjsip</code></td><td>PJSIP endpoint/auth/aor bloklarını yazar — <b>idempotent</b> (işaretli blok: eskiyi siler, yenisini yazar). <code>RemoveEndpoint</code> var.</td></tr>
+      <tr><td><code>internal/dialplan</code></td><td><code>[rnvcs-panels]</code> extension blokları (direkt arama, ring group, cihaz) — çoğu <b>append</b> (idempotent değil).</td></tr>
+      <tr><td><code>internal/confbridge</code></td><td><code>ConfBridge()</code> oda extension'ı — idempotent (işaretli blok).</td></tr>
+      <tr><td><code>internal/iaxconf</code> · <code>voicemail</code></td><td>IAX2 trunk blokları; voicemail mailbox tanımları (<code>RewriteAll</code> tüm dosyayı DB'den yeniden üretir).</td></tr>
+      <tr><td><code>internal/ami</code></td><td>Ham TCP AMI istemcisi: Login, Originate, ConfbridgeList/Kick/PlayFile, event dinleme.</td></tr>
+      <tr><td><code>internal/confwatch</code></td><td>AMI event'lerini dinler; konferansta tek kişi kalınca anons çalıp odayı kapatır.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="roller">
+  <h2><span class="num">5</span> Roller &amp; yetki</h2>
+  <p class="lead">Üç rol: <b>ADMIN</b>, <b>MAINTAINER</b>, <b>OPERATOR</b>. ✔ = izinli.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>İşlem</th><th style="text-align:center">ADMIN</th><th style="text-align:center">MAINTAINER</th><th style="text-align:center">OPERATOR</th></tr></thead>
+    <tbody>
+      <tr><td>Kullanıcı CRUD, SIP hesabı ata, IAX trunk tanımla</td><td style="text-align:center">✔</td><td style="text-align:center">✖</td><td style="text-align:center">✖</td></tr>
+      <tr><td>Panel tanımla, sync, yetki ata, ring group tanımla</td><td style="text-align:center">✔</td><td style="text-align:center">✔</td><td style="text-align:center">✖</td></tr>
+      <tr><td>Başkası adına kısayol / sayfam kutusu</td><td style="text-align:center">✔</td><td style="text-align:center">✔</td><td style="text-align:center">✖</td></tr>
+      <tr><td>Tüm panellerin voicemail / event / CDR</td><td style="text-align:center">✔</td><td style="text-align:center">✔</td><td style="text-align:center">sadece kendi paneli</td></tr>
+      <tr><td>Listeleme (users, panels, speed-dials…)</td><td style="text-align:center">✔</td><td style="text-align:center">✔</td><td style="text-align:center">✔ (kısıt yok)</td></tr>
+      <tr><td>Konferans başlat / kick</td><td style="text-align:center">✔</td><td style="text-align:center">✔</td><td style="text-align:center">✔</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note warn"><span class="lbl">Dikkat</span>
+    <code>can_login</code> yalnızca <code>RNVCS_ENFORCE_PANEL_LOGIN=1</code> ise kontrol edilir (varsayılan
+    <b>kapalı</b>). <code>can_call</code>, <code>can_anons</code>, <code>can_config</code>
+    <b>hiçbir yerde uygulanmaz</b> — sadece login cevabında istemciye döner.</div>
+</section>
+
+<section id="akislar">
+  <h2><span class="num">6</span> Kritik akışlar</h2>
+
+  <h3>Operatör login (panelden)</h3>
+  <div class="flow">
+    <div class="step"><div class="who">panel_app</div><div class="act"><span class="m">POST CORE/api/login</span> — kullanıcı adı, şifre, panel_code gönderir</div></div>
+    <div class="step"><div class="who c2">core</div><div class="act">Kullanıcıyı çeker → <code>enabled?</code> → PBKDF2 doğrular → <code>can_login</code> panellerini listeler → token üretir (eski oturum düşer) → LOGIN event + oturum geçmişi yazar</div></div>
+    <div class="step"><div class="who">panel_app</div><div class="act"><span class="m">POST BACKEND/api/session</span> — CORE url + token iletir</div></div>
+    <div class="step"><div class="who c3">backend</div><div class="act">CORE'dan SIP kimliğini çeker → kalıcı UDP soket açar → Asterisk'e REGISTER (401 → MD5 digest → 200) → 0.7×Expires'ta yeniler</div></div>
+    <div class="step"><div class="who">panel_app</div><div class="act">1 sn'de bir çağrı durumu, 15 sn'de bir oturum geçerliliği yoklar (401 → otomatik logout)</div></div>
+  </div>
+
+  <h3>SIP hesabı atama (ADMIN, Bakım Terminali'nden)</h3>
+  <div class="flow">
+    <div class="step"><div class="who c2">core</div><div class="act"><code>UPDATE users SET sip_username, sip_password</code> <span class="m">(düz metin)</span></div></div>
+    <div class="step"><div class="who c2">core</div><div class="act"><code>pjsip.AppendEndpoint</code> → config + <span class="m">"pjsip reload"</span></div></div>
+    <div class="step"><div class="who c2">core</div><div class="act"><code>dialplan.AppendDirectExtension</code> → kullanıcı doğrudan aranabilir + <span class="m">"dialplan reload"</span></div></div>
+  </div>
+
+  <h3>Gelen çağrı (panel tarafı)</h3>
+  <div class="flow">
+    <div class="step"><div class="who c3">Asterisk→backend</div><div class="act">INVITE (SDP) gelir → meşgulse 486, SDP yoksa 488; değilse 100 Trying + 180 Ringing, durum <code>ringing</code></div></div>
+    <div class="step"><div class="who">panel_app</div><div class="act">Durumu "ringing" görür → gelen çağrı ekranı + Web Audio ile çalma sesi</div></div>
+    <div class="step"><div class="who c3">backend</div><div class="act">Operatör "Cevapla" → RTP soketi aç, 200 OK + SDP (PCMU) → ses köprüsü: <code>arecord</code> → μ-law → RTP → μ-law → <code>aplay</code></div></div>
+    <div class="step"><div class="who c3">backend</div><div class="act">BYE gelince → 200 OK, durum sıfırlanır (arecord/aplay kapatılır)</div></div>
+  </div>
+
+  <h3>Konferans</h3>
+  <div class="flow">
+    <div class="step"><div class="who">panel_app</div><div class="act"><span class="m">POST /api/conference</span> — en az 2 katılımcı (USER/INTERKOM/IP_HORN)</div></div>
+    <div class="step"><div class="who c2">core</div><div class="act">Benzersiz oda kodu üret → <code>ConfBridge()</code> extension'ı yaz → her katılımcıyı AMI <code>Originate</code> ile odaya çağır</div></div>
+    <div class="step"><div class="who c2">confwatch</div><div class="act">Odada tek kişi kalınca "yalnız kaldınız" anonsu çalar, 3 sn sonra çıkarıp odayı kapatır</div></div>
+  </div>
+</section>
+
+<section id="panelbackend">
+  <h2><span class="num">7</span> panel-backend</h2>
+  <p class="lead">Kiosk kullanıcısının <code>systemd --user</code> servisi (PipeWire soketine erişim için).
+    <code>:8090</code>'da <b>kimlik doğrulamasız</b> yerel HTTP API.</p>
+  <div class="cards">
+    <div class="card"><h4>audiowatch</h4><p><code>udevadm monitor</code> ile ses kartı tak/çıkar olaylarını dinler, <code>wpctl status</code> çıktısını parse edip cihaz listesini yayınlar.</p></div>
+    <div class="card"><h4>internal/voip</h4><p>Elle yazılmış SIP UA: tek kalıcı UDP soket, REGISTER + digest, INVITE/BYE/CANCEL işleme, Dial (giden çağrı), durum makinesi <code>idle→ringing→dialing→active</code>.</p></div>
+    <div class="card"><h4>ses</h4><p><code>arecord</code>/<code>aplay</code> alt süreçleri, 20 ms çerçeve, G.711 μ-law kodek, <code>RNVCS_MIC_GAIN</code> (4×) yazılımsal kazanç.</p></div>
+    <div class="card"><h4>HTTP uçları</h4><p><code>/api/audio-devices</code>, <code>/api/volume</code> (wpctl), <code>/api/session</code>, <code>/api/call/{status,dial,answer,reject,hangup}</code>.</p></div>
+  </div>
+  <div class="note"><span class="lbl">Not</span>
+    <code>fix_voip.py</code> 2026-08-25'teki bir düzeltmeyi uygulayan tek seferlik yama; değişiklik
+    zaten kaynakta, dosya artık işlevsiz.</div>
+</section>
+
+<section id="panelapp">
+  <h2><span class="num">8</span> panel-app</h2>
+  <p class="lead">Tek dosya (~180 KB; ~92 KB'ı gömülü base64 arka plan görseli). Yapılandırma URL ile:
+    <code>?panel=…&amp;core=…&amp;backend=…&amp;demo</code>.</p>
+  <ul class="lead">
+    <li><b>VoIP sekmesi</b>: dialpad, hızlı arama (Platformlar / Merkezler / IP Horn filtreleri, 8'li sayfalama).</li>
+    <li><b>Telsiz sekmesi</b>: statik görsel, işlevsiz (önizleme).</li>
+    <li><b>Sayfam sekmesi</b>: 9×6 kutu, uzun basışla menü (etiket/taşıma/silme/bilgi); sunucuda <code>sayfam_tiles</code> olarak saklanır.</li>
+    <li>Oturum <code>sessionStorage</code>'da; dil TR/AZ/EN; ekran klavyesi; sesli mesaj 30 sn'de bir yoklanır.</li>
+  </ul>
+  <div class="note warn"><span class="lbl">İkiz dosya</span>
+    <code>panel_app.html</code> ve <code>panel_app_3_1.html</code> birebir aynı — tek fark <code>CORE</code>
+    varsayılan adresi. İkisini tutmak yerine <code>?core=</code> parametresiyle çözmek yeterli.</div>
+</section>
+
+<section id="veri">
+  <h2><span class="num">9</span> Veri modeli (PostgreSQL)</h2>
+  <p class="lead">Repodaki migration'lar yalnızca <code>001_init</code> ve <code>004_annon_devices</code>.
+    <b>002 ve 003 repoda yok</b> — kodun beklediği bazı nesneler hiçbir migration'da tanımlı değil.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Tablo</th><th>Kaynak</th><th>Not</th></tr></thead>
+    <tbody>
+      <tr><td><code>users</code></td><td>001</td><td>PBKDF2 hash, rol, <code>sip_*</code> (düz metin)</td></tr>
+      <tr><td><code>panels</code></td><td>001+004</td><td><code>device_type</code> PANEL/INTERKOM/IP_HORN</td></tr>
+      <tr><td><code>user_panel_permissions</code></td><td>001</td><td>can_login/call/anons/config</td></tr>
+      <tr><td><code>panel_session_history</code></td><td><span class="pill">kod (main.go)</span></td><td>login/logout aralıkları — CDR join için</td></tr>
+      <tr><td><code>ring_group_members</code></td><td>001</td><td>kod <code>user_id</code> bekler → <b>001'de yok</b>, USER üyesi eklenemez</td></tr>
+      <tr><td><code>sayfam_tiles</code>, <code>sayfam_searches</code></td><td><span class="pill" style="color:var(--red)">YOK</span></td><td>kod <code>003</code> dosyasına atıf verir, dosya repoda değil</td></tr>
+      <tr><td><code>iax_trunks</code></td><td>001</td><td><code>secret</code> düz metin; prefix dialplan'i yazılmıyor</td></tr>
+      <tr><td><code>asterisk_cdr</code></td><td>001</td><td>bitiş kolonu <code>enddate</code> (<code>end</code> rezerve kelime)</td></tr>
+      <tr><td><code>conference_sessions</code></td><td>004</td><td><code>ended_at</code> hiç set edilmiyor</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note danger"><span class="lbl">Önemli</span>
+    Temiz bir DB'de eksik migration'lar yüzünden "Sayfam" sekmesi ve kullanıcı üyeli çatal arama
+    <b>çalışmaz</b>. Ayrıntı: <code>docs/GUNCELLEME_ONERILERI.md §1</code>.</div>
+</section>
+
+<section id="kurulum">
+  <h2><span class="num">10</span> Kurulum &amp; dağıtım</h2>
+  <h3>İlk kurulum (CORE'da, sırayla)</h3>
+  <pre><code>sudo bash scripts/core_kurulum.sh        # Asterisk, PostgreSQL, ODBC, Redis, ufw
+sudo bash scripts/core_migrate.sh        # şema (migration'lar sırayla)
+cd core && sudo bash install_yonetim_servisi.sh   # derle, kur, ilk admin</code></pre>
+  <p class="lead">Panelde: <code>cd panel-backend && bash install_servis.sh</code> (kiosk kullanıcısı, sudo'suz).</p>
+  <h3>CI/CD (Gitea Actions)</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Workflow</th><th>Tetik</th><th>Yapar</th></tr></thead>
+    <tbody>
+      <tr><td><code>ci.yml</code></td><td>her push/PR</td><td>gofmt, go vet, <code>go test -race</code>; ayrı job'da migration'ları Postgres'e <b>iki kez</b> uygular (idempotency)</td></tr>
+      <tr><td><code>release.yml</code></td><td><code>v*.*.*</code> tag</td><td>derle → tar paketle → yedek CORE'a SSH ile dağıt → smoke test</td></tr>
+      <tr><td><code>deploy-production.yml</code></td><td>elle (dispatch)</td><td>üretime dağıtım + smoke test başarısızsa rollback</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note warn"><span class="lbl">Tutarsızlıklar</span>
+    <code>CICD_TASARIMI.md</code> "deploy-production.yml kaldırıldı" diyor ama dosya duruyor;
+    <code>rollback.sh</code> binary'leri geri koymuyor (yalnızca symlink); <code>release.yml</code>'deki
+    <code>-ldflags -X main.Version</code> etkisiz (öyle bir değişken yok). Bkz. <code>docs/GUNCELLEME_ONERILERI.md</code>.</div>
+</section>
+
+<section id="surum">
+  <h2><span class="num">11</span> Sürüm durumu</h2>
+  <p class="lead">Tek bir sürüm numarası yok — beş ayrı yerde beş farklı değer:</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Yer</th><th>Değer</th></tr></thead>
+    <tbody>
+      <tr><td><code>VERSION</code> (kök)</td><td>1.6.8</td></tr>
+      <tr><td><code>core/VERSION</code> (<code>/api/version</code>'a gömülen)</td><td>1.7.0</td></tr>
+      <tr><td><code>panel-backend/VERSION</code></td><td>1.6.0</td></tr>
+      <tr><td><code>panel_app.html</code></td><td>"v3.1" (sabit metin)</td></tr>
+      <tr><td><code>docs/CHANGELOG.md</code></td><td>boş</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note"><span class="lbl">Sonraki adım</span>
+    Hangi sürümün nerede çalıştığı dosyadan anlaşılamıyor. Öneri: tek kaynak (kök <code>VERSION</code>),
+    derleme anında gömme. Ayrıntı: <code>docs/GUNCELLEME_ONERILERI.md §2</code>.</div>
+</section>
+
+<div class="footer wrap">
+  Bu sayfa <code>docs/MIMARI.md</code>'nin görsel sürümüdür · RNVCS · 2026-10-06 ·
+  Eşlik eden belgeler: API_REFERANSI.md · GUVENLIK_RAPORU.md · GUNCELLEME_ONERILERI.md
+</div>
+</div>
+
+<script>
+  (function(){
+    var btn=document.getElementById('themeBtn');
+    var saved;
+    try{saved=localStorage.getItem('rnvcs-theme');}catch(e){}
+    if(saved){document.documentElement.setAttribute('data-theme',saved);}
+    btn.addEventListener('click',function(){
+      var cur=document.documentElement.getAttribute('data-theme');
+      var mql=window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var next=(cur==='dark'||(!cur&&mql))?'light':'dark';
+      document.documentElement.setAttribute('data-theme',next);
+      try{localStorage.setItem('rnvcs-theme',next);}catch(e){}
+    });
+  })();
+</script>
+</body>
+</html>
