@@ -1,0 +1,74 @@
+# RNVCS — yerel deneme ortamı: PostgreSQL + core + panel arayüzü.
+#
+#   docker compose up -d --build
+#   docker compose exec core rnvcs-core create-admin admin '<sifre>'
+#   -> Bakım terminali: http://localhost:8091   Panel (demo): http://localhost:8080/?demo
+#
+# Asterisk bu ortamda YOKTUR. Kullanıcı/panel kayıtları çalışır (cevapta 'warning' döner);
+# çalma grubu, IAX2 trunk ve konferans Asterisk gerektirir. panel-backend ses donanımı
+# (PipeWire/ALSA) ister, bu yüzden panel cihazında çalışır, burada değil.
+#
+# Değerleri .env dosyasıyla değiştirebilirsin (bkz. .env.example). Parolada URL'de
+# özel anlam taşıyan karakter (@ : / ? #) kullanma: DSN içinde olduğu gibi geçer.
+name: rnvcs
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rnvcs
+      POSTGRES_PASSWORD: ${RNVCS_DB_PASSWORD:-rnvcs_dev_only}
+      POSTGRES_DB: rnvcs
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rnvcs -d rnvcs"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  # Tek seferlik: migration'lar idempotent, tekrar çalıştırmak güvenli
+  # (yükseltmeden sonra: docker compose run --rm migrate).
+  migrate:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DSN: postgresql://rnvcs:${RNVCS_DB_PASSWORD:-rnvcs_dev_only}@postgres:5432/rnvcs?sslmode=disable
+    volumes:
+      - ./RNVCS/migrations:/migrations:ro
+    entrypoint:
+      - sh
+      - -ec
+      - |
+        for f in /migrations/*.sql; do
+          echo "==> $$f"
+          psql -q -v ON_ERROR_STOP=1 "$$DSN" -f "$$f"
+        done
+    restart: "no"
+
+  core:
+    build: ./RNVCS/core
+    image: rnvcs-core:local
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      RNVCS_DB_DSN: postgresql://rnvcs:${RNVCS_DB_PASSWORD:-rnvcs_dev_only}@postgres:5432/rnvcs?sslmode=disable
+      RNVCS_PROVISIONING_KEY: ${RNVCS_PROVISIONING_KEY:-dev-only-provisioning-key}
+    ports:
+      - "127.0.0.1:8091:8091"
+    restart: unless-stopped
+
+  panel-app:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./RNVCS/panel-app/panel_app.html:/usr/share/nginx/html/index.html:ro
+    ports:
+      - "127.0.0.1:8080:80"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

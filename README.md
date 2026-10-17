@@ -111,6 +111,19 @@ flowchart TB
 
 ## Try it locally
 
+### With Docker (quickest)
+
+```bash
+docker compose up -d --build
+docker compose exec core rnvcs-core create-admin admin 'choose-a-password'
+```
+
+Open <http://localhost:8091> for the maintenance terminal and <http://localhost:8080/?demo> for the panel UI in demo mode. Compose starts PostgreSQL 16, applies the migrations (idempotent), builds the `core` image and serves the panel page with nginx. Ports are bound to `127.0.0.1` only; override the database password and provisioning key with a `.env` file (see [`.env.example`](.env.example)). `docker compose down -v` removes everything.
+
+Each push to `main` also publishes the core image to GHCR: `ghcr.io/erenozgu/rnvcs-core:latest`. `panel-backend` is not containerised: it drives the panel's sound card through PipeWire/ALSA and runs on the panel device.
+
+### Without Docker
+
 You need Go 1.21+, PostgreSQL (CI uses 16) with the `psql` client, and `curl`. Asterisk is **not** required to explore the API and the maintenance terminal.
 
 ```bash
@@ -143,7 +156,12 @@ Without Asterisk, creating panels and users still works and returns a warning; r
 RNVCS_DB_DSN='postgresql://localhost/rnvcs_test?sslmode=disable' ./RNVCS/scripts/ci_integration_test.sh
 ```
 
-GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) runs on every push and pull request: `gofmt`, `go vet` and race-enabled tests for both modules, `bash -n` over every shell script, and the integration test above against a PostgreSQL service container.
+```bash
+# builds the image, starts the compose stack, checks health, login and the panel page, then tears everything down
+./RNVCS/scripts/compose_smoke_test.sh
+```
+
+GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) runs on every push and pull request: `gofmt`, `go vet` and race-enabled tests for both modules, `bash -n` over every shell script, the integration test above against a PostgreSQL service container, and the Docker compose smoke test. Pushes to `main` that pass publish the core image to GHCR.
 
 ## Release and deployment
 
@@ -160,10 +178,11 @@ Server provisioning is in [`scripts/core_kurulum.sh`](RNVCS/scripts/core_kurulum
 
 ```text
 .
-├── .github/workflows/ci.yml      # GitHub Actions: Go, shell syntax, PostgreSQL integration test
+├── .github/workflows/ci.yml      # GitHub Actions: Go, shell syntax, PostgreSQL integration, Docker smoke test, GHCR publish
+├── docker-compose.yml            # PostgreSQL + core + panel UI for local use
 ├── docs/                         # README images
 └── RNVCS/
-    ├── core/                     # management service (REST API, config writers, AMI client)
+    ├── core/                     # management service (REST API, config writers, AMI client), Dockerfile
     │   ├── internal/{api,auth,pg,pjsip,dialplan,confbridge,iaxconf,voicemail,ami,confwatch}
     │   └── web/                  # embedded maintenance terminal
     ├── panel-backend/            # panel-side SIP/RTP engine and audio watcher

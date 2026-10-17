@@ -49,7 +49,7 @@
     <td align="center"><sub>Bakım terminali: paneller ve cihazlar</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/screenshots/bkt-catal.jpg" alt="Bakım terminali: çatal arama grupları"></td>
+    <td width="50%"><img src="docs/screenshots/bkt-catal.jpg" alt="Bakım terminali: çalma grupları"></td>
     <td width="50%"><img src="docs/screenshots/bkt-olaylar.jpg" alt="Bakım terminali: olay kayıtları"></td>
   </tr>
   <tr>
@@ -103,13 +103,26 @@ flowchart TB
 
 ## Tasarım kararları
 
-- **PostgreSQL tek gerçek kaynaktır.** Panel, kullanıcı ya da trunk önce veritabanına yazılır; ardından ilgili blok bir Asterisk dinamik yapılandırma dosyasına üretilir ve Asterisk yeniden yüklenir. Asterisk realtime bilinçli olarak kullanılmaz. Asterisk erişilemezse panel kaydı yine oluşur ve API, `/api/panels/sync` ile sonradan onarılabilecek bir uyarı döner; çatal arama grupları ve trunk'lar ise yapılandırmaları yazılamazsa geri alınır.
+- **PostgreSQL tek gerçek kaynaktır.** Panel, kullanıcı ya da trunk önce veritabanına yazılır; ardından ilgili blok bir Asterisk dinamik yapılandırma dosyasına üretilir ve Asterisk yeniden yüklenir. Asterisk realtime bilinçli olarak kullanılmaz. Asterisk erişilemezse panel kaydı yine oluşur ve API, `/api/panels/sync` ile sonradan onarılabilecek bir uyarı döner; çalma grupları ve trunk'lar ise yapılandırmaları yazılamazsa geri alınır.
 - **Sıfır üçüncü taraf Go bağımlılığı.** Go modül proxy'sine erişimin garanti olmadığı izole bir ağ için yazıldı. Her şey standart kütüphaneyle: parola hashleme (PBKDF2-HMAC-SHA256, 210.000 iterasyon), AMI istemcisi, SIP mesaj işleme, RTP ve G.711 codec. Veritabanına `psql` CLI üzerinden erişilir.
 - **SIP kimliği cihaza değil operatöre aittir.** Bir panelde kim oturum açarsa kendi SIP hesabıyla register olur; böylece arama kayıtlarında bir koltuk değil bir kişi görünür. INTERKOM ve IP Horn gibi donanımlar kendi endpoint'ini alır.
 - **Güvenli teslimat.** Sürümler etiketli build'lerdir ve otomatik olarak yalnızca yedek CORE'a kadar dağıtılır, ardından smoke test çalışır. Üretim ayrı, elle tetiklenen bir iş akışıdır ve önce dağıtım öncesi veritabanı yedeği alır; `rollback.sh` bir önceki sürüme döner. Bkz. [`CICD_TASARIMI.md`](RNVCS/docs/CICD_TASARIMI.md).
 - **Migration'lar idempotent ve iki kez test edilir.** CI her migration'ı gerçek bir PostgreSQL'de iki kez uygular; ikinci tur hata verirse başarısız olur.
 
 ## Yerelde deneyin
+
+### Docker ile (en hızlısı)
+
+```bash
+docker compose up -d --build
+docker compose exec core rnvcs-core create-admin admin 'bir-parola-secin'
+```
+
+Bakım terminali için <http://localhost:8091>, panel arayüzünün demo modu için <http://localhost:8080/?demo> adresini açın. Compose, PostgreSQL 16'yı başlatır, migration'ları uygular (idempotent), `core` imajını derler ve panel sayfasını nginx ile sunar. Portlar yalnızca `127.0.0.1`'e bağlanır; veritabanı parolasını ve provisioning anahtarını bir `.env` dosyasıyla değiştirebilirsiniz ([`.env.example`](.env.example)). `docker compose down -v` her şeyi siler.
+
+`main`'e her push, core imajını GHCR'ye de yayınlar: `ghcr.io/erenozgu/rnvcs-core:latest`. `panel-backend` konteynere alınmadı: panelin ses kartını PipeWire/ALSA üzerinden sürer ve panel cihazında çalışır.
+
+### Docker olmadan
 
 Go 1.21+, `psql` istemcisiyle birlikte PostgreSQL (CI 16 kullanır) ve `curl` gerekir. API'yi ve bakım terminalini denemek için Asterisk **gerekmez**.
 
@@ -130,7 +143,7 @@ Bakım terminali için <http://localhost:8091> adresini açın ve az önce oluş
 
 Panel arayüzü için tarayıcıda `RNVCS/panel-app/panel_app_3_1.html?demo` dosyasını açın. Demo modu arka uç gerektirmez. Çalışan bir core'a bağlamak için `?core=http://localhost:8091&panel=<panel_kodu>` kullanın.
 
-Asterisk olmadan panel ve kullanıcı oluşturmak yine çalışır ve bir uyarı döner; çatal arama grupları, IAX2 trunk'lar ve konferanslar Asterisk'in yapılandırmasını yazdığı ve CLI/AMI'sini çağırdığı için Asterisk gerektirir.
+Asterisk olmadan panel ve kullanıcı oluşturmak yine çalışır ve bir uyarı döner; çalma grupları, IAX2 trunk'lar ve konferanslar Asterisk'in yapılandırmasını yazdığı ve CLI/AMI'sini çağırdığı için Asterisk gerektirir.
 
 ## Testler ve CI
 
@@ -143,7 +156,12 @@ Asterisk olmadan panel ve kullanıcı oluşturmak yine çalışır ve bir uyarı
 RNVCS_DB_DSN='postgresql://localhost/rnvcs_test?sslmode=disable' ./RNVCS/scripts/ci_integration_test.sh
 ```
 
-GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) her push ve pull request'te çalışır: iki modül için `gofmt`, `go vet` ve race etkin testler, tüm shell betiklerinde `bash -n` ve bir PostgreSQL servis konteynerine karşı yukarıdaki entegrasyon testi.
+```bash
+# imajı derler, compose yığınını başlatır; sağlık, login ve panel sayfasını kontrol eder, sonra her şeyi siler
+./RNVCS/scripts/compose_smoke_test.sh
+```
+
+GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)) her push ve pull request'te çalışır: iki modül için `gofmt`, `go vet` ve race etkin testler, tüm shell betiklerinde `bash -n`, bir PostgreSQL servis konteynerine karşı yukarıdaki entegrasyon testi ve Docker compose duman testi. Geçen `main` push'ları core imajını GHCR'ye yayınlar.
 
 ## Sürüm ve dağıtım
 
@@ -160,10 +178,11 @@ Sunucu kurulumu [`scripts/core_kurulum.sh`](RNVCS/scripts/core_kurulum.sh) (Aste
 
 ```text
 .
-├── .github/workflows/ci.yml      # GitHub Actions: Go, shell sözdizimi, PostgreSQL entegrasyon testi
+├── .github/workflows/ci.yml      # GitHub Actions: Go, shell sözdizimi, PostgreSQL entegrasyon, Docker duman testi, GHCR yayını
+├── docker-compose.yml            # yerel kullanım için PostgreSQL + core + panel arayüzü
 ├── docs/                         # README görselleri
 └── RNVCS/
-    ├── core/                     # yönetim servisi (REST API, yapılandırma yazıcıları, AMI istemcisi)
+    ├── core/                     # yönetim servisi (REST API, yapılandırma yazıcıları, AMI istemcisi), Dockerfile
     │   ├── internal/{api,auth,pg,pjsip,dialplan,confbridge,iaxconf,voicemail,ami,confwatch}
     │   └── web/                  # gömülü bakım terminali
     ├── panel-backend/            # panel tarafı SIP/RTP motoru ve ses izleyici
