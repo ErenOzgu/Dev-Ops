@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [core, panel-backend]
+    defaults:
+      run:
+        working-directory: RNVCS/${{ matrix.module }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: false # sıfır harici bağımlılık: go.sum yok
+      - name: gofmt
+        run: |
+          test -z "$(gofmt -l .)" || { echo "gofmt gerekli:"; gofmt -l .; exit 1; }
+      - name: go vet
+        run: go vet ./...
+      - name: go test (race)
+        run: go test ./... -race -count=1
+
+  shell:
+    name: Shell betikleri (sözdizimi)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash -n
+        run: |
+          status=0
+          while IFS= read -r f; do
+            bash -n "$f" || { echo "sözdizimi hatası: $f"; status=1; }
+          done < <(git ls-files '*.sh')
+          exit $status
+
+  integration:
+    name: Entegrasyon (PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rnvcs
+          POSTGRES_PASSWORD: rnvcs_test_only
+          POSTGRES_DB: rnvcs_ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rnvcs"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache: false
+      - name: Uçtan uca test (migration + core API)
+        env:
+          RNVCS_DB_DSN: postgresql://rnvcs:rnvcs_test_only@localhost:5432/rnvcs_ci_test?sslmode=disable
+        run: ./RNVCS/scripts/ci_integration_test.sh
