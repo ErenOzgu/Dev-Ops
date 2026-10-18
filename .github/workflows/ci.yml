@@ -15,7 +15,7 @@ concurrency:
 jobs:
   go:
     name: Go (${{ matrix.module }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -39,7 +39,7 @@ jobs:
 
   shell:
     name: Shell betikleri (sözdizimi)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: bash -n
@@ -52,7 +52,7 @@ jobs:
 
   integration:
     name: Entegrasyon (PostgreSQL)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:16
@@ -80,7 +80,7 @@ jobs:
 
   docker:
     name: Docker (compose duman testi)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: İmajı derle, compose ile ayağa kaldır, API'yi doğrula
@@ -90,7 +90,7 @@ jobs:
     name: core imajını GHCR'ye yayınla
     needs: [go, shell, integration, docker]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
