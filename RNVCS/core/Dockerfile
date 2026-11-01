@@ -2,16 +2,13 @@
 
 # RNVCS core (Yönetim Servisi) — küçük, root olmayan imaj.
 # Derleme bağlamı: RNVCS/core   (docker build -t rnvcs-core RNVCS/core)
-ARG GO_VERSION=1.23
-ARG ALPINE_VERSION=3.20
-
-FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS build
+FROM golang:1.23-alpine3.20@sha256:96917b18cf0bf6dc54f726696eb526fe6e6a1ab45e43d4a292aae11f3d503ffe AS build
 WORKDIR /src
 # Harici bağımlılık yok (go.sum yok): yalnızca standart kütüphane.
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/rnvcs-core .
 
-FROM alpine:${ALPINE_VERSION}
+FROM alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
 # core veritabanına psql istemcisi üzerinden bağlanır (bkz. internal/pg).
 RUN apk add --no-cache postgresql16-client ca-certificates tzdata \
  && addgroup -S rnvcs \

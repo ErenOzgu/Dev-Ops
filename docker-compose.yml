@@ -14,7 +14,7 @@ name: rnvcs
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
     environment:
       POSTGRES_USER: rnvcs
       POSTGRES_PASSWORD: ${RNVCS_DB_PASSWORD:-rnvcs_dev_only}
@@ -31,7 +31,7 @@ services:
   # Tek seferlik: migration'lar idempotent, tekrar çalıştırmak güvenli
   # (yükseltmeden sonra: docker compose run --rm migrate).
   migrate:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
     depends_on:
       postgres:
         condition: service_healthy
@@ -63,7 +63,7 @@ services:
     restart: unless-stopped
 
   panel-app:
-    image: nginx:1.27-alpine
+    image: nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
     volumes:
       - ./RNVCS/panel-app/panel_app.html:/usr/share/nginx/html/index.html:ro
     ports:

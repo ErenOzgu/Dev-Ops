@@ -9,3 +9,27 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+  - package-ecosystem: docker
+    directory: /RNVCS/core
+    schedule:
+      interval: monthly
+    groups:
+      images:
+        patterns: ["*"]
+    ignore:
+      # Base images move by digest and patch release only. A new minor or major version of Go, Postgres or Python is a
+      # decision (with a change to the code and its tests), not a monthly bump.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      images:
+        patterns: ["*"]
+    ignore:
+      # Base images move by digest and patch release only. A new minor or major version of Go, Postgres or Python is a
+      # decision (with a change to the code and its tests), not a monthly bump.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
