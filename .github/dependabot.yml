@@ -1,0 +1,11 @@
+# One pull request a month, with everything that moved in it, so keeping the pins fresh does not mean a stream of
+# notifications. Actions are pinned to commit SHAs; Dependabot updates the SHA and the version in the comment.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
